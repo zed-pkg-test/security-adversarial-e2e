@@ -14,9 +14,9 @@ on:
         default: 5d1d13119be5784f545a7d812cdfaae3ca120693
         type: string
       cluster_commit:
-        description: Exact ORESoftware/k8s-cluster dev commit
+        description: Exact ORESoftware/k8s-cluster repair candidate commit
         required: false
-        default: 18f1fa1dc8360c4817e1adbc1351b93f7d8604de
+        default: 4bc664a651cd912e8c16a15dd8f0dfcb1e1870b5
         type: string
 
 permissions:
@@ -32,7 +32,7 @@ defaults:
 
 env:
   ZED_CLI_COMMIT: ${{ inputs.product_commit || '5d1d13119be5784f545a7d812cdfaae3ca120693' }}
-  K8S_CLUSTER_COMMIT: ${{ inputs.cluster_commit || '18f1fa1dc8360c4817e1adbc1351b93f7d8604de' }}
+  K8S_CLUSTER_COMMIT: ${{ inputs.cluster_commit || '4bc664a651cd912e8c16a15dd8f0dfcb1e1870b5' }}
 
 jobs:
   certify:
@@ -62,7 +62,7 @@ jobs:
           persist-credentials: false
           show-progress: false
 
-      - name: Check out exact current k8s-cluster dev without submodules
+      - name: Check out exact k8s-cluster repair candidate without submodules
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ORESoftware/k8s-cluster
