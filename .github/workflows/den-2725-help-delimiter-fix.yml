@@ -22,7 +22,7 @@ env:
 
 jobs:
   verify-and-export:
-    runs-on: ubuntu-24.04
+    runs-on: macos-15
     timeout-minutes: 25
     steps:
       - name: Check out security harness without credentials
@@ -90,7 +90,7 @@ jobs:
           cp product/zed-cli/src/external_subcommands.rs artifact/src/
           cp product/zed-cli/tests/external_gitops_dispatch.rs artifact/tests/
           git -C product/zed-cli diff --binary > artifact/den-2725-help-delimiter-fix.patch
-          sha256sum \
+          shasum -a 256 \
             artifact/src/external_subcommands.rs \
             artifact/tests/external_gitops_dispatch.rs \
             artifact/den-2725-help-delimiter-fix.patch \
