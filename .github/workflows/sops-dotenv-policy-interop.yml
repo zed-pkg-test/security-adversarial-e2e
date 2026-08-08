@@ -33,7 +33,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ORESoftware/flags-2-env
-          ref: bfe271d3a7d596009bf3346b122a2567562fefbd
+          ref: 8949b110cd4f345642d70349d49beae849bb6a0c
           path: external/flags-2-env-fixed
           persist-credentials: false
 
