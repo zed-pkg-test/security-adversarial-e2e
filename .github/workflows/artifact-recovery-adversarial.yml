@@ -1,0 +1,147 @@
+name: Artifact recovery adversarial evidence
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/artifact-recovery-adversarial.yml
+      - artifact-recovery-source.json
+      - scripts/test-artifact-recovery-adversarial.py
+      - scripts/audit-artifact-recovery-github-evidence.py
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/artifact-recovery-adversarial.yml
+      - artifact-recovery-source.json
+      - scripts/test-artifact-recovery-adversarial.py
+      - scripts/audit-artifact-recovery-github-evidence.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: artifact-recovery-adversarial-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  adversarial-evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out adversarial harness without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          show-progress: false
+
+      - name: Check out pinned artifact-recovery source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ORESoftware/ai-agent-coordinator.rs
+          ref: 25aff7209bde90d41494b4d6f98bf724aae33708
+          path: external/ai-agent-coordinator
+          persist-credentials: false
+          show-progress: false
+
+      - name: Install Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+
+      - name: Validate immutable source pin
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m json.tool artifact-recovery-source.json >/dev/null
+          expected="$(python3 -c 'import json; print(json.load(open("artifact-recovery-source.json"))["commit"])')"
+          actual="$(git -C external/ai-agent-coordinator rev-parse HEAD)"
+          test "$actual" = "$expected"
+          remote="$(git -C external/ai-agent-coordinator remote get-url origin)"
+          test "${remote%.git}" = 'https://github.com/ORESoftware/ai-agent-coordinator.rs'
+
+      - name: Validate workflow syntax
+        uses: docker://rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+        with:
+          args: .github/workflows/artifact-recovery-adversarial.yml
+
+      - name: Compile recovery and adversarial surfaces
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            external/ai-agent-coordinator/tools/artifact_recovery_ledger.py \
+            external/ai-agent-coordinator/tools/artifact_recovery/*.py \
+            external/ai-agent-coordinator/scripts/build_artifact_recovery_backfill.py \
+            scripts/test-artifact-recovery-adversarial.py \
+            scripts/audit-artifact-recovery-github-evidence.py
+
+      - name: Run adversarial validation contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p test-results/artifact-recovery
+          python3 scripts/test-artifact-recovery-adversarial.py \
+            --source-root external/ai-agent-coordinator \
+            2>&1 | tee test-results/artifact-recovery/adversarial-tests.txt
+
+      - name: Audit current GitHub recovery evidence
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 scripts/audit-artifact-recovery-github-evidence.py \
+            --source-pin artifact-recovery-source.json \
+            --output test-results/artifact-recovery/github-evidence.json
+
+      - name: Validate bounded live evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('test-results/artifact-recovery/github-evidence.json')
+          evidence = json.loads(path.read_text())
+          assert evidence['schema_version'] == 'artifact_recovery_github_evidence.v1'
+          assert evidence['summary'] == {
+              'recovered_repositories': 4,
+              'merged_recovery_pull_requests': 4,
+              'missing_repositories': 4,
+              'failures': 0,
+          }
+          assert len(evidence['recovered']) == 4
+          assert len(evidence['missing']) == 4
+          assert all(item['visibility'] == 'public' for item in evidence['recovered'])
+          assert all(item['default_branch'] == 'main' for item in evidence['recovered'])
+          assert all(item['pull_request']['state'] == 'closed' for item in evidence['recovered'])
+          assert all(item['pull_request']['merged_at'] for item in evidence['recovered'])
+          assert all(item['http_status'] == 404 for item in evidence['missing'])
+          serialized = json.dumps(evidence, sort_keys=True).lower()
+          assert 'authorization' not in serialized
+          assert 'private key' not in serialized
+          assert 'prompt_body' not in serialized
+          PY
+
+      - name: Reject credential-shaped literals in the added surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -nE 'gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|cfat_[A-Za-z0-9_]{20,}|lin_api_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}' \
+            artifact-recovery-source.json \
+            scripts/test-artifact-recovery-adversarial.py \
+            scripts/audit-artifact-recovery-github-evidence.py \
+            .github/workflows/artifact-recovery-adversarial.yml
+          then
+            echo 'credential-shaped literal found in adversarial recovery surface' >&2
+            exit 1
+          fi
+
+      - name: Upload exact-head adversarial evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: artifact-recovery-adversarial-${{ github.sha }}
+          path: test-results/artifact-recovery
+          retention-days: 14
+          if-no-files-found: error
