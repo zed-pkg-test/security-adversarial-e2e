@@ -29,11 +29,11 @@ jobs:
           path: external/ores-sops
           persist-credentials: false
 
-      - name: Checkout fixed flags-2-env fixture branch
+      - name: Checkout merged flags-2-env SOPS baseline
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ORESoftware/flags-2-env
-          ref: e63704514c82333dba6235052d3b302c5c7c31c2
+          ref: bb05d736ca5c5bc36267de3d3e5e71d414b48980
           path: external/flags-2-env-fixed
           persist-credentials: false
 
