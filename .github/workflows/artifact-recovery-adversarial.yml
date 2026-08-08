@@ -38,7 +38,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ORESoftware/ai-agent-coordinator.rs
-          ref: 999175968021aff8a4fef484cfc383f0d7ba3495
+          ref: 25aff7209bde90d41494b4d6f98bf724aae33708
           path: external/ai-agent-coordinator
           persist-credentials: false
           show-progress: false
