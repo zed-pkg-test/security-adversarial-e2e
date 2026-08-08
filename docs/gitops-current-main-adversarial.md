@@ -1,14 +1,30 @@
 # Current-main GitOps adversarial certification
 
-This test-org lane verifies that the merged DEN-2724/DEN-2725 contract remains intact after later product and cluster changes. It is intentionally different from the original exact-parent feature canary: it certifies the current merged heads and mutates disposable worktrees to prove fail-closed behavior.
+This test-org lane verifies that the merged DEN-2724/DEN-2725 contract remains intact after later product and cluster changes. It is intentionally different from the original exact-parent feature canary: it certifies the current product head, validates a proposed cluster repair, and mutates disposable worktrees to prove fail-closed behavior.
 
-## Immutable inputs
+## Drift discovered by the first run
 
-Default pins:
+The initial exact-current pair was:
 
 ```text
 zed-pkg/zed-cli@5d1d13119be5784f545a7d812cdfaae3ca120693
 ORESoftware/k8s-cluster@18f1fa1dc8360c4817e1adbc1351b93f7d8604de
+```
+
+All product/native source gates and release builds passed. Real catalog validation then correctly rejected a stale declaration:
+
+```text
+catalog inventory/source pin: 32be546f5ee020c1de3b099a47e6760d00e3f6e4
+indexed fabrication-server gitlink: 5e305b9bf40d28139bdabf9342c304f759cbfee5
+```
+
+The existing GitOps workflow did not include `remote/deployments/**` in its path filters, so a gitlink-only update could bypass the catalog parity check. `ORESoftware/k8s-cluster#1209` aligns the catalog and adds the missing trigger boundary.
+
+## Current immutable inputs
+
+```text
+zed-pkg/zed-cli@5d1d13119be5784f545a7d812cdfaae3ca120693
+ORESoftware/k8s-cluster@4bc664a651cd912e8c16a15dd8f0dfcb1e1870b5
 ```
 
 The workflow runs on Ubuntu 24.04, macOS 15, and Windows Server 2025.
@@ -20,7 +36,7 @@ Each platform:
 1. verifies both immutable checkout identities;
 2. runs rustfmt, focused dispatcher and validator tests, strict Clippy, package-graph validation, and the native `k8s-cluster` validator suite;
 3. builds exact release `zed` and `zed-gitops` siblings;
-4. validates the real current `k8s-cluster` catalog through standalone `zed-gitops`, root-dispatched `zed gitops`, and the native Python validator;
+4. validates the repaired real `k8s-cluster` catalog through standalone `zed-gitops`, root-dispatched `zed gitops`, and the native Python validator;
 5. requires root/direct Zed report identity and native/Zed record-count agreement;
 6. renders the native deterministic preview and requires one rendered item per validated record; and
 7. requires the ApplicationSet pilot to retain its inert annotation, fail-closed template settings, exact child revision source, collision-free generated name, and zero references from other Argo YAML/JSON.
@@ -55,6 +71,7 @@ Passing this lane does not authorize activation of the inert ApplicationSet. Act
 
 ## Coordination
 
+- Catalog parity repair: `ORESoftware/k8s-cluster#1209`
 - Root dispatcher merge: `zed-pkg/zed-cli#242`
 - Exact-parent canary: `zed-pkg-test/zed-pkg-e2e#134`
 - Cluster contract merge: `ORESoftware/k8s-cluster#1109`
