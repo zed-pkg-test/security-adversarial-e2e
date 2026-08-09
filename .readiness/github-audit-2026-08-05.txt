@@ -1,0 +1,3 @@
+One-time, non-production GitHub readiness write proof.
+
+Created in the designated zed-pkg-test organization to verify branch, repository-content, and pull-request permissions. This file contains no credentials and is not intended for merge.
