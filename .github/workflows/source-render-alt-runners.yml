@@ -1,0 +1,132 @@
+name: reproduce GitOps source render on alternate runners
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/source-render-alt-runners.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: source-render-alt-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  TEST_PACKAGE_COMMIT: 153d65ad2b3cf5fc139efb0dbdf29fa816ce55d2
+  K8S_CLUSTER_COMMIT: 0c71eed05f8be50ac22ebe73715ded4a871234a8
+  FABRICATION_SERVER_COMMIT: cea4a3c772012e1f2f87050bac24e911b8e2e577
+  SOURCE_SNAPSHOT: fixtures/direct-source/fabrication-server.rs/cea4a3c772012e1f2f87050bac24e911b8e2e577
+
+jobs:
+  reproduce:
+    name: alternate source render / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-14]
+
+    steps:
+      - name: Check out independent harness
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          show-progress: false
+
+      - name: Check out exact test package
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: zed-pkg-test/zed-pkg-e2e
+          ref: ${{ env.TEST_PACKAGE_COMMIT }}
+          path: evidence-source
+          fetch-depth: 1
+          persist-credentials: false
+          show-progress: false
+
+      - name: Check out exact cluster candidate without submodules
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ORESoftware/k8s-cluster
+          ref: ${{ env.K8S_CLUSTER_COMMIT }}
+          path: product/k8s-cluster
+          fetch-depth: 1
+          submodules: false
+          persist-credentials: false
+          show-progress: false
+
+      - name: Install Python 3.12
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Execute exact and independent contracts
+        run: |
+          set -euo pipefail
+          test "$(git -C evidence-source rev-parse HEAD)" = "$TEST_PACKAGE_COMMIT"
+          test "$(git -C product/k8s-cluster rev-parse HEAD)" = "$K8S_CLUSTER_COMMIT"
+          snapshot="evidence-source/$SOURCE_SNAPSHOT"
+          python -m py_compile \
+            evidence-source/scripts/install_pinned_kustomize.py \
+            evidence-source/scripts/direct_source_render_canary.py \
+            evidence-source/scripts/check_snapshot_endpoint_policy.py \
+            evidence-source/scripts/test_snapshot_endpoint_policy.py \
+            "$snapshot/scripts/ci/check_k8s_network_contract.py" \
+            "$snapshot/scripts/ci/test_check_k8s_network_contract.py"
+          python evidence-source/scripts/test_snapshot_endpoint_policy.py
+          (
+            cd "$snapshot"
+            python scripts/ci/test_check_k8s_network_contract.py
+            python scripts/ci/check_k8s_network_contract.py
+          )
+          rm -rf evidence-source/scripts/__pycache__ "$snapshot/scripts/ci/__pycache__"
+
+      - name: Install pinned Kustomize and render twice
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          snapshot="evidence-source/$SOURCE_SNAPSHOT"
+          kustomize="$(python evidence-source/scripts/install_pinned_kustomize.py \
+            --destination "$RUNNER_TEMP/pinned-kustomize" \
+            --metadata "artifacts/kustomize-install-${RUNNER_OS}-${RUNNER_ARCH}.json")"
+          python evidence-source/scripts/check_snapshot_endpoint_policy.py \
+            --deployment "$snapshot/k8s/deployment.yaml" \
+            --network-policy "$snapshot/k8s/networkpolicy.yaml" \
+            --evidence "artifacts/snapshot-endpoint-policy-${RUNNER_OS}-${RUNNER_ARCH}.json"
+          python evidence-source/scripts/direct_source_render_canary.py \
+            --cluster product/k8s-cluster \
+            --snapshot "$snapshot" \
+            --source-metadata "$snapshot/source.json" \
+            --cluster-commit "$K8S_CLUSTER_COMMIT" \
+            --child-commit "$FABRICATION_SERVER_COMMIT" \
+            --kustomize "$kustomize" \
+            --kustomize-metadata "artifacts/kustomize-install-${RUNNER_OS}-${RUNNER_ARCH}.json" \
+            --rendered "artifacts/fabrication-render-${RUNNER_OS}-${RUNNER_ARCH}.yaml" \
+            --evidence "artifacts/direct-source-render-${RUNNER_OS}-${RUNNER_ARCH}.json"
+
+      - name: Require pristine checkouts
+        run: |
+          set -euo pipefail
+          for checkout in evidence-source product/k8s-cluster; do
+            git -C "$checkout" diff --exit-code
+            git -C "$checkout" diff --cached --exit-code
+            test -z "$(git -C "$checkout" status --porcelain --untracked-files=all)"
+          done
+          harness_status="$(git status --porcelain --untracked-files=all | grep -vE '^\?\? (artifacts|evidence-source|product)/' || true)"
+          test -z "$harness_status"
+
+      - name: Upload alternate-runner evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: source-render-alt-${{ runner.os }}-${{ runner.arch }}-${{ env.K8S_CLUSTER_COMMIT }}-${{ env.FABRICATION_SERVER_COMMIT }}
+          path: artifacts
+          if-no-files-found: error
+          retention-days: 14
+          include-hidden-files: false
