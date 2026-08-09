@@ -1,0 +1,83 @@
+name: flags-2-env Zed version source
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flags-zed-version-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  zed-version-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout test repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Checkout exact flags-2-env repair candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ORESoftware/flags-2-env
+          ref: fd50fe8ff05429f35ef1d20ed066717884bfd7f6
+          path: external/flags-2-env
+          persist-credentials: false
+
+      - name: Checkout pinned Zed interfaces
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: zed-pkg/zed-interfaces
+          ref: 07d01604461d00e237c7d86ad3855464167574ec
+          path: external/zed-interfaces
+          persist-credentials: false
+
+      - name: Checkout pinned Zed CLI
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: zed-pkg/zed-cli
+          ref: 8d04bc598a4b0b464466cbec3c44d18cf2922137
+          path: external/zed-cli
+          persist-credentials: false
+
+      - name: Assert the E2E has no stale duplicated version pin
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(python3 - <<'PY'
+          import pathlib, tomllib
+          p = tomllib.loads(pathlib.Path('external/flags-2-env/.zpkg.toml').read_text())['package']
+          print(p['version'])
+          PY
+          )" = '0.2.0'
+          if grep -Fq 'oresoftware/flags-2-env@=0.1.0' external/flags-2-env/tests/flags-2-env-e2e.sh; then
+            echo 'stale exact version remains in Zed E2E' >&2
+            exit 1
+          fi
+
+      - name: Install Zsh and use stable Rust
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes zsh
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+
+      - name: Build pinned Zed CLI
+        shell: bash
+        run: cargo build --locked --manifest-path external/zed-cli/Cargo.toml
+
+      - name: Run the candidate's real eight-layout Zed E2E
+        working-directory: external/flags-2-env
+        shell: bash
+        env:
+          F2E_E2E_ROOT: ${{ runner.temp }}/flags-zed-version-source
+        run: |
+          set -euo pipefail
+          tests/flags-2-env-e2e.sh "$GITHUB_WORKSPACE/external/zed-cli/target/debug/zed"

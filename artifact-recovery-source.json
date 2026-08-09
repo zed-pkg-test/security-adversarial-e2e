@@ -1,0 +1,8 @@
+{
+  "schema_version": "artifact_recovery_source_pin.v1",
+  "repository": "ORESoftware/ai-agent-coordinator.rs",
+  "commit": "25aff7209bde90d41494b4d6f98bf724aae33708",
+  "recovery_merge_commit": "624c2bae2ac92f65a3a0e86a842fed83758d0972",
+  "linear_issue": "DEN-2797",
+  "purpose": "Adversarial validation and live GitHub evidence drift detection"
+}
