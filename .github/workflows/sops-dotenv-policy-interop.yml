@@ -1,0 +1,72 @@
+name: SOPS dotenv policy interop
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sops-dotenv-policy-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  policy-interop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout test harness
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Checkout pinned ORESoftware SOPS scanner
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ORESoftware/ores-sops
+          ref: bcedd169490775d58f418a59248a3e2354451cf2
+          path: external/ores-sops
+          persist-credentials: false
+
+      - name: Checkout merged flags-2-env SOPS baseline
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ORESoftware/flags-2-env
+          ref: bb05d736ca5c5bc36267de3d3e5e71d414b48980
+          path: external/flags-2-env-fixed
+          persist-credentials: false
+
+      - name: Checkout overlapping flags-2-env PR 27 before reconciliation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ORESoftware/flags-2-env
+          ref: 11e61b2a1c8a1c21132525a2bdb02b2700b502b2
+          path: external/flags-2-env-pr27
+          persist-credentials: false
+
+      - name: Checkout merged real consumer pilot
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ORESoftware/devops-slack
+          ref: 7c8a24fd26d2e25410a2aa792bbdb413a47022f9
+          path: external/devops-slack-main
+          persist-credentials: false
+
+      - name: Assert cross-repository plaintext-dotenv policy
+        shell: bash
+        env:
+          SCANNER_DIR: ${{ github.workspace }}/external/ores-sops
+          WORK_ROOT: ${{ github.workspace }}/external
+        run: |
+          set -euo pipefail
+          bash scripts/sops-dotenv-policy-interop.sh | tee "$RUNNER_TEMP/sops-dotenv-policy.tsv"
+          {
+            echo '## Cross-org SOPS dotenv policy evidence'
+            echo
+            echo 'Pinned sources; no decryption identity or service credential was injected.'
+            echo
+            echo '```text'
+            cat "$RUNNER_TEMP/sops-dotenv-policy.tsv"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

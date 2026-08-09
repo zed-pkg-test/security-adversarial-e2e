@@ -1,0 +1,170 @@
+name: current-main GitOps adversarial matrix
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/gitops-current-main-adversarial.yml
+      - scripts/gitops_current_main_adversarial.py
+      - docs/gitops-current-main-adversarial.md
+  workflow_dispatch:
+    inputs:
+      product_commit:
+        description: Exact zed-pkg/zed-cli main commit
+        required: false
+        default: 5d1d13119be5784f545a7d812cdfaae3ca120693
+        type: string
+      cluster_commit:
+        description: Exact ORESoftware/k8s-cluster repair candidate commit
+        required: false
+        default: 4bc664a651cd912e8c16a15dd8f0dfcb1e1870b5
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gitops-current-main-adversarial-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  ZED_CLI_COMMIT: ${{ inputs.product_commit || '5d1d13119be5784f545a7d812cdfaae3ca120693' }}
+  K8S_CLUSTER_COMMIT: ${{ inputs.cluster_commit || '4bc664a651cd912e8c16a15dd8f0dfcb1e1870b5' }}
+
+jobs:
+  certify:
+    name: GitOps adversarial / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+
+    steps:
+      - name: Check out independent security harness
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          show-progress: false
+
+      - name: Check out exact current zed-cli main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: zed-pkg/zed-cli
+          ref: ${{ env.ZED_CLI_COMMIT }}
+          path: product/zed-cli
+          fetch-depth: 1
+          persist-credentials: false
+          show-progress: false
+
+      - name: Check out exact k8s-cluster repair candidate without submodules
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ORESoftware/k8s-cluster
+          ref: ${{ env.K8S_CLUSTER_COMMIT }}
+          path: product/k8s-cluster
+          fetch-depth: 1
+          submodules: false
+          persist-credentials: false
+          show-progress: false
+
+      - name: Verify immutable checkout identities
+        run: |
+          set -euo pipefail
+          [[ "$ZED_CLI_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$K8S_CLUSTER_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git -C product/zed-cli rev-parse HEAD)" = "$ZED_CLI_COMMIT"
+          test "$(git -C product/k8s-cluster rev-parse HEAD)" = "$K8S_CLUSTER_COMMIT"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Install Python 3.12
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Run exact product and native contract quality gates
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/gitops_current_main_adversarial.py
+          rm -rf scripts/__pycache__
+          cargo fmt --manifest-path product/zed-cli/Cargo.toml --all --check
+          cargo test --manifest-path product/zed-cli/Cargo.toml --locked --lib external_subcommands::tests
+          cargo test --manifest-path product/zed-cli/Cargo.toml --locked --test external_gitops_dispatch
+          cargo test --manifest-path product/zed-cli/Cargo.toml --locked --bin zed-gitops
+          cargo clippy --manifest-path product/zed-cli/Cargo.toml --locked \
+            --lib --bin zed --bin zed-gitops --test external_gitops_dispatch -- -D warnings
+          bash product/zed-cli/scripts/validate-zed-package-graph.sh
+          python product/k8s-cluster/tools/test_gitops_composition.py -v
+
+      - name: Build exact release siblings
+        run: |
+          set -euo pipefail
+          cargo build --manifest-path product/zed-cli/Cargo.toml --locked --release \
+            --bin zed --bin zed-gitops
+
+      - name: Select platform binary paths
+        run: |
+          set -euo pipefail
+          zed="$GITHUB_WORKSPACE/product/zed-cli/target/release/zed"
+          gitops="$GITHUB_WORKSPACE/product/zed-cli/target/release/zed-gitops"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            zed="${zed}.exe"
+            gitops="${gitops}.exe"
+          fi
+          test -x "$zed" || [[ "$RUNNER_OS" == "Windows" ]]
+          test -f "$gitops"
+          echo "ZED_BINARY=$zed" >> "$GITHUB_ENV"
+          echo "ZED_GITOPS_BINARY=$gitops" >> "$GITHUB_ENV"
+
+      - name: Run current-main positive and adversarial certification
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python scripts/gitops_current_main_adversarial.py \
+            --zed "$ZED_BINARY" \
+            --zed-gitops "$ZED_GITOPS_BINARY" \
+            --product product/zed-cli \
+            --cluster product/k8s-cluster \
+            --product-commit "$ZED_CLI_COMMIT" \
+            --cluster-commit "$K8S_CLUSTER_COMMIT" \
+            --work "$RUNNER_TEMP/gitops-current-main-adversarial" \
+            --evidence "artifacts/gitops-current-main-${RUNNER_OS}-${RUNNER_ARCH}.json"
+          rm -rf scripts/__pycache__
+
+      - name: Require pristine source checkouts and harness
+        run: |
+          set -euo pipefail
+          for checkout in product/zed-cli product/k8s-cluster; do
+            git -C "$checkout" diff --exit-code
+            git -C "$checkout" diff --cached --exit-code
+            status="$(git -C "$checkout" status --porcelain --untracked-files=all)"
+            if [[ -n "$status" ]]; then
+              printf 'unexpected checkout drift in %s:\n%s\n' "$checkout" "$status" >&2
+              exit 1
+            fi
+          done
+          harness_status="$(git status --porcelain --untracked-files=all | grep -vE '^\?\? (artifacts|product)/' || true)"
+          if [[ -n "$harness_status" ]]; then
+            printf 'unexpected harness drift:\n%s\n' "$harness_status" >&2
+            exit 1
+          fi
+
+      - name: Upload exact-SHA adversarial evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: gitops-current-main-${{ runner.os }}-${{ runner.arch }}-${{ env.ZED_CLI_COMMIT }}-${{ env.K8S_CLUSTER_COMMIT }}
+          path: artifacts/gitops-current-main-${{ runner.os }}-${{ runner.arch }}.json
+          if-no-files-found: error
+          retention-days: 14
+          include-hidden-files: false
