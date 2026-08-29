@@ -3,6 +3,7 @@ name: DEN-2725 external help delimiter fix
 on:
   push:
     branches:
+      - main
       - agent/den-2725-help-delimiter-fix
   pull_request:
     paths:
