@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      NEXT_LOGGERS_SHA: 6194f249640aea9bbaad449632c2f844fdb515ae
+      NEXT_LOGGERS_SHA: c8b57a9cf158016ff47442c652641541907152b8
     steps:
       - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
@@ -30,15 +30,6 @@ jobs:
           git -C source fetch --no-tags --depth=1 origin "$NEXT_LOGGERS_SHA"
           test "$(git -C source rev-parse FETCH_HEAD)" = "$NEXT_LOGGERS_SHA"
           git -C source checkout --detach "$NEXT_LOGGERS_SHA"
-      - name: Print canonical Gleam formatter diff
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd source/sdk/gleam
-          gleam format src test
-          cd ../..
-          git diff -- sdk/gleam/src/oresoftware_next_loggers/context.gleam sdk/gleam/src/oresoftware_next_loggers/shutdown.gleam
-          if ! git diff --quiet -- sdk/gleam/src/oresoftware_next_loggers/context.gleam sdk/gleam/src/oresoftware_next_loggers/shutdown.gleam; then
-            echo 'FORMAT_ORACLE_DIFF_PRESENT'
-            exit 1
-          fi
+      - name: Verify canonical Gleam formatting
+        working-directory: source/sdk/gleam
+        run: gleam format --check src test
