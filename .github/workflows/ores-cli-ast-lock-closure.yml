@@ -88,16 +88,39 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          expected="$(printf '%s\n' \
+            evidence/ores-cli-lockgen/dart/pubspec.lock \
+            evidence/ores-cli-lockgen/gleam/Cargo.lock \
+            evidence/ores-cli-lockgen/rust/Cargo.lock \
+            evidence/ores-cli-lockgen/typescript/package-lock.json | sort)"
+
           git add \
             evidence/ores-cli-lockgen/rust/Cargo.lock \
             evidence/ores-cli-lockgen/gleam/Cargo.lock \
             evidence/ores-cli-lockgen/typescript/package-lock.json \
             evidence/ores-cli-lockgen/dart/pubspec.lock
           git diff --cached --check
-          unexpected="$(git status --porcelain --untracked-files=all | grep -vE '^(A |M )evidence/ores-cli-lockgen/(rust/Cargo.lock|gleam/Cargo.lock|typescript/package-lock.json|dart/pubspec.lock)$' || true)"
-          if [[ -n "$unexpected" ]]; then
-            printf 'unexpected lock-generator drift:\n%s\n' "$unexpected" >&2
+
+          staged="$(git diff --cached --name-only | sort)"
+          if [[ "$staged" != "$expected" ]] && [[ -n "$staged" ]]; then
+            printf 'unexpected staged lock-generator delta:\n%s\n' "$staged" >&2
             exit 1
+          fi
+
+          unstaged="$(git diff --name-only)"
+          if [[ -n "$unstaged" ]]; then
+            printf 'unexpected unstaged lock-generator drift:\n%s\n' "$unstaged" >&2
+            exit 1
+          fi
+
+          untracked="$(git ls-files --others --exclude-standard)"
+          if [[ -n "$untracked" ]]; then
+            printf 'unexpected untracked lock-generator drift:\n%s\n' "$untracked" >&2
+            exit 1
+          fi
+
+          if [[ -z "$staged" ]]; then
+            echo 'all four lockfiles already reproduce byte-for-byte'
           fi
 
       - name: Emit deterministic lock digests
