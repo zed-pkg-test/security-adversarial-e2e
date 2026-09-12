@@ -1,0 +1,7 @@
+{
+  "name": "@oresoftware/ores-ast-typescript",
+  "private": true,
+  "type": "module",
+  "engines": { "node": "22.16.0" },
+  "dependencies": { "ts-morph": "28.0.0" }
+}

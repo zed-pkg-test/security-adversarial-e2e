@@ -1,0 +1,160 @@
+name: DEN-390 ores-cli AST helper lock closure
+
+on:
+  push:
+    branches:
+      - DEN-390-ores-cli-lock-closure-test
+    paths:
+      - '.github/workflows/ores-cli-ast-lock-closure.yml'
+      - 'evidence/ores-cli-lockgen/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: den-390-ores-cli-lock-closure-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  ORES_CLI_SOURCE_SHA: 8049e745e8da83ec4d85985467104a28e499517e
+
+jobs:
+  generate-and-reproduce:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out exact test harness branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: true
+          show-progress: false
+          fetch-depth: 1
+
+      - name: Verify immutable harness input revision
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$ORES_CLI_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v5
+        with:
+          node-version: 22.16.0
+          package-manager-cache: false
+
+      - name: Install Dart
+        uses: dart-lang/setup-dart@6afc89df92d6eb3834022f73cd65adc8cdfcb92d # v1.8.1
+        with:
+          sdk: '3.12.2'
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          toolchain: '1.95.0'
+
+      - name: Generate all four dependency closures
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo generate-lockfile --manifest-path evidence/ores-cli-lockgen/rust/Cargo.toml
+          cargo generate-lockfile --manifest-path evidence/ores-cli-lockgen/gleam/Cargo.toml
+          npm install \
+            --prefix evidence/ores-cli-lockgen/typescript \
+            --package-lock-only \
+            --ignore-scripts \
+            --no-audit \
+            --no-fund
+          (
+            cd evidence/ores-cli-lockgen/dart
+            dart pub get
+          )
+          rm -rf \
+            evidence/ores-cli-lockgen/dart/.dart_tool \
+            evidence/ores-cli-lockgen/typescript/node_modules
+
+          for lock in \
+            evidence/ores-cli-lockgen/rust/Cargo.lock \
+            evidence/ores-cli-lockgen/gleam/Cargo.lock \
+            evidence/ores-cli-lockgen/typescript/package-lock.json \
+            evidence/ores-cli-lockgen/dart/pubspec.lock; do
+            test -s "$lock"
+          done
+
+      - name: Admit only the expected lockfile delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="$(printf '%s\n' \
+            evidence/ores-cli-lockgen/dart/pubspec.lock \
+            evidence/ores-cli-lockgen/gleam/Cargo.lock \
+            evidence/ores-cli-lockgen/rust/Cargo.lock \
+            evidence/ores-cli-lockgen/typescript/package-lock.json | sort)"
+
+          git add \
+            evidence/ores-cli-lockgen/rust/Cargo.lock \
+            evidence/ores-cli-lockgen/gleam/Cargo.lock \
+            evidence/ores-cli-lockgen/typescript/package-lock.json \
+            evidence/ores-cli-lockgen/dart/pubspec.lock
+          git diff --cached --check
+
+          staged="$(git diff --cached --name-only | sort)"
+          if [[ "$staged" != "$expected" ]] && [[ -n "$staged" ]]; then
+            printf 'unexpected staged lock-generator delta:\n%s\n' "$staged" >&2
+            exit 1
+          fi
+
+          unstaged="$(git diff --name-only)"
+          if [[ -n "$unstaged" ]]; then
+            printf 'unexpected unstaged lock-generator drift:\n%s\n' "$unstaged" >&2
+            exit 1
+          fi
+
+          untracked="$(git ls-files --others --exclude-standard)"
+          if [[ -n "$untracked" ]]; then
+            printf 'unexpected untracked lock-generator drift:\n%s\n' "$untracked" >&2
+            exit 1
+          fi
+
+          if [[ -z "$staged" ]]; then
+            echo 'all four lockfiles already reproduce byte-for-byte'
+          fi
+
+      - name: Emit deterministic lock digests
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum \
+            evidence/ores-cli-lockgen/rust/Cargo.lock \
+            evidence/ores-cli-lockgen/gleam/Cargo.lock \
+            evidence/ores-cli-lockgen/typescript/package-lock.json \
+            evidence/ores-cli-lockgen/dart/pubspec.lock
+
+      - name: Upload generated lock evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ores-cli-ast-helper-locks-${{ env.ORES_CLI_SOURCE_SHA }}
+          path: |
+            evidence/ores-cli-lockgen/rust/Cargo.lock
+            evidence/ores-cli-lockgen/gleam/Cargo.lock
+            evidence/ores-cli-lockgen/typescript/package-lock.json
+            evidence/ores-cli-lockgen/dart/pubspec.lock
+          if-no-files-found: error
+          retention-days: 14
+          include-hidden-files: false
+
+      - name: Persist first reproducible lock materialization to the test branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --cached --quiet; then
+            echo 'lock closure already reproduces byte-for-byte'
+            exit 0
+          fi
+          git config user.name 'ORESoftware test harness'
+          git config user.email 'noreply@oresoftware.com'
+          git commit -m 'test(DEN-390): materialize reproducible ores-cli helper locks'
+          git push origin "HEAD:${GITHUB_REF_NAME}"

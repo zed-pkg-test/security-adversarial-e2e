@@ -1,0 +1,6 @@
+name: ores_ast_dart
+publish_to: none
+environment:
+  sdk: '>=3.11.0 <4.0.0'
+dependencies:
+  analyzer: 14.3.0
