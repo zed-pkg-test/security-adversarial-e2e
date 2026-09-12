@@ -1,0 +1,81 @@
+name: Adversarial logging chain contract
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/logging-chain-adversarial.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  adversarial-logging-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      LOGGER_SHA: 1838474e85b0655080262cfa1135434f57545881
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Fetch exact logger source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init logger-source
+          git -C logger-source remote add origin https://github.com/ORESoftware/next-loggers.ts.git
+          git -C logger-source fetch --no-tags --depth=1 origin "$LOGGER_SHA"
+          test "$(git -C logger-source rev-parse FETCH_HEAD)" = "$LOGGER_SHA"
+          git -C logger-source checkout --detach "$LOGGER_SHA"
+      - name: Build lint surface
+        working-directory: logger-source
+        run: |
+          npm ci --ignore-scripts
+          ./node_modules/.bin/tsc -p tsconfig.build.json
+      - name: Run adversarial lint cases
+        working-directory: logger-source
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { Linter } from 'eslint';
+          import eslintPlugin from './dist/eslint-plugin.js';
+
+          const lint = (code) => new Linter().verify(code, [{
+            languageOptions: { ecmaVersion: 'latest', sourceType: 'module' },
+            plugins: { 'next-loggers': eslintPlugin },
+            rules: { 'next-loggers/require-observability-chain': 'error' },
+          }], { filename: 'adversarial.mjs' });
+
+          assert.deepEqual(lint(`
+            import { createLogger } from 'some-other-lib';
+            const telemetry = createLogger();
+            telemetry.info('unrelated logger');
+            console.info('console is unrelated');
+          `), []);
+
+          const dynamic = lint(`
+            import { createLogger } from '@oresoftware/next-loggers';
+            const auditLogger = createLogger();
+            const traceId = 'ores-trace-ThisMustNotBeHoisted123';
+            const routineId = 'ores-routine-ZedAudit_7vN2qM8xP4kR';
+            auditLogger.error('dynamic trace marker')
+              .addTraceId(traceId)
+              .addRoutineId(routineId)
+              .send();
+          `);
+          assert.equal(dynamic.length, 1);
+          assert.match(dynamic[0].message, /inline addTrace/);
+
+          const missingSend = lint(`
+            import { logger } from '@oresoftware/next-loggers';
+            logger.warn('not delivered')
+              .addTraceId('ores-trace-ZedWarn_4kP8nR2sW6yT')
+              .addRoutineId('ores-routine-ZedWarn_9mQ3vN7xK2pR');
+          `);
+          assert.equal(missingSend.length, 1);
+          assert.match(missingSend[0].message, /\.send\(\)/);
+          NODE
