@@ -1,0 +1,63 @@
+name: Registry trust revocation adversarial
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  ZED_INTERFACES_SHA: b94055fea8bf360d0419ab6b7bff4ea39a6e5ef0
+  REGISTRY_PROTOCOL_BLOB_SHA: 6ea3a2c9ddd4f4599adc0f0276e96ccee38a8e5f
+
+jobs:
+  trust-cache-adversarial:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout canary
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Checkout exact current registry contract
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: zed-pkg/zed-interfaces
+          ref: ${{ env.ZED_INTERFACES_SHA }}
+          path: .product/zed-interfaces
+          persist-credentials: false
+
+      - name: Verify exact registry-v1 source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          product=.product/zed-interfaces
+          test "$(git -C "$product" rev-parse HEAD)" = "$ZED_INTERFACES_SHA"
+          test "$(git -C "$product" hash-object src/rust/registry_protocol_v1.rs)" = "$REGISTRY_PROTOCOL_BLOB_SHA"
+          test -f "$product/schemas/registry-checkpoint-v1.json"
+          test -f "$product/schemas/registry-index-record-v1.json"
+
+      - name: Compile adversarial model
+        run: python3 -m compileall -q adversarial tests
+
+      - name: Refuse revoked tombstoned stale and cross-registry cached artifacts
+        env:
+          PYTHONPATH: .
+        run: python3 -m unittest tests.test_registry_trust -v
+
+      - name: Re-run production registry-v1 trust contract
+        run: |
+          cargo test \
+            --manifest-path .product/zed-interfaces/Cargo.toml \
+            --locked \
+            registry_protocol_v1::tests:: \
+            -- --nocapture
+
+      - name: Record scope boundary
+        run: |
+          echo 'This lane is an adversarial reference-model + exact production-contract cross-check.'
+          echo 'It does not yet prove the production CLI/registry cache refuses a revoked artifact end-to-end.'
