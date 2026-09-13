@@ -1,4 +1,4 @@
-name: next-loggers Dart Go format oracle
+name: next-loggers Dart Go format acceptance
 
 on:
   pull_request:
@@ -11,11 +11,11 @@ permissions:
   contents: read
 
 jobs:
-  dart-go-format-oracle:
+  dart-go-format-acceptance:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      NEXT_LOGGERS_SHA: c8b57a9cf158016ff47442c652641541907152b8
+      NEXT_LOGGERS_SHA: 9cb63c6952b035af4ec30c163feaf900846ef1a7
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -34,22 +34,15 @@ jobs:
           git -C source fetch --no-tags --depth=1 origin "$NEXT_LOGGERS_SHA"
           test "$(git -C source rev-parse FETCH_HEAD)" = "$NEXT_LOGGERS_SHA"
           git -C source checkout --detach "$NEXT_LOGGERS_SHA"
-      - name: Print canonical Go formatter diff
+      - name: Verify canonical Go formatting
         shell: bash
         run: |
           set -euo pipefail
-          gofmt -w source/sdk/go
-          git -C source diff -- sdk/go
-      - name: Print canonical Dart formatter diff
-        shell: bash
-        run: |
-          set -euo pipefail
-          dart format source/sdk/dart
-          git -C source diff -- sdk/dart
-      - name: Fail while formatter drift exists
-        shell: bash
-        run: |
-          if ! git -C source diff --quiet -- sdk/go sdk/dart; then
-            echo 'FORMAT_ORACLE_DIFF_PRESENT'
+          unformatted="$(gofmt -l source/sdk/go)"
+          if [[ -n "$unformatted" ]]; then
+            printf 'Go files require gofmt:\n%s\n' "$unformatted"
             exit 1
           fi
+      - name: Verify canonical Dart formatting
+        shell: bash
+        run: dart format --output=none --set-exit-if-changed source/sdk/dart
