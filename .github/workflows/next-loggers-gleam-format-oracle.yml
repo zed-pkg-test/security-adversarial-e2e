@@ -1,4 +1,4 @@
-name: next-loggers Gleam format oracle
+name: next-loggers Gleam format acceptance
 
 on:
   pull_request:
@@ -10,11 +10,11 @@ permissions:
   contents: read
 
 jobs:
-  gleam-format-oracle:
+  gleam-format-acceptance:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      NEXT_LOGGERS_SHA: c8b57a9cf158016ff47442c652641541907152b8
+      NEXT_LOGGERS_SHA: 9cb63c6952b035af4ec30c163feaf900846ef1a7
     steps:
       - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
