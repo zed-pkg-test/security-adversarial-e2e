@@ -1,0 +1,64 @@
+name: Zed PR54 Durable Object adversarial acceptance
+
+on:
+  push:
+    branches: [test/durable-coordinator-pr54]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: durable-coordinator-pr54-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  adversarial:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out test harness
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check out Zed PR54 source head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: zed-pkg/zed-infra
+          ref: 32417ecfedc34bf8da0ca4268e7fb1dae68955c1
+          path: source/zed-infra
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: "22.22.1"
+
+      - name: Run adversarial package-key and fencing tests
+        env:
+          SOURCE_ROOT: ${{ github.workspace }}/source/zed-infra
+        run: node --test test/durable-coordinator-pr54.test.mjs
+
+      - name: Exercise source coordinator checks
+        working-directory: source/zed-infra/modules/cloudflare/durable-coordinator
+        run: |
+          set -euo pipefail
+          npm install --ignore-scripts --no-audit --no-fund
+          npm run check
+
+      - name: Instantiate ZedPackageCoordinator in local workerd
+        working-directory: source/zed-infra/modules/cloudflare/durable-coordinator
+        run: |
+          set -euo pipefail
+          npx wrangler dev --local --env preview --port 8787 --log-level error > "$RUNNER_TEMP/wrangler.log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true; cat "$RUNNER_TEMP/wrangler.log"' EXIT
+          for i in $(seq 1 40); do
+            if curl --fail --silent http://127.0.0.1:8787/health > "$RUNNER_TEMP/health.json"; then break; fi
+            sleep 1
+          done
+          node -e 'const x=require(process.argv[1]); if(!x.ok) process.exit(1)' "$RUNNER_TEMP/health.json"
+          curl --fail --silent 'http://127.0.0.1:8787/do-health?object=%40scope%2Fpackage' > "$RUNNER_TEMP/do-health.json"
+          node -e 'const x=require(process.argv[1]); if(!x.ok || x.durable_object!=="ZedPackageCoordinator" || x.storage!=="sqlite" || x.rpc!==true) process.exit(1)' "$RUNNER_TEMP/do-health.json"
