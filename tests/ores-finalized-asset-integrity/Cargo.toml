@@ -6,4 +6,4 @@ rust-version = "1.88"
 publish = false
 
 [dependencies]
-ores-api-docs = { git = "https://github.com/ORESoftware/api-docs.git", rev = "ada7ad60258638da1002ca7e823d900aaa838392", package = "ores-api-docs", default-features = false }
+ores-api-docs = { git = "https://github.com/ORESoftware/api-docs.git", rev = "659947241ef6f77a076e7a10c6b67b0895b610b7", package = "ores-api-docs", default-features = false }
