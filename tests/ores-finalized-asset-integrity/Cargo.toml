@@ -7,3 +7,4 @@ publish = false
 
 [dependencies]
 ores-api-docs = { git = "https://github.com/ORESoftware/api-docs.git", rev = "659947241ef6f77a076e7a10c6b67b0895b610b7", package = "ores-api-docs", default-features = false }
+sha2 = "0.10"
