@@ -34,13 +34,9 @@ pub async fn page() {}
     fs::write(&asset_path, b"body { color: red; }\n").expect("tamper finalized css");
 
     let materialized = root.join(".ores-stack/materialized");
-    let error = materialize_finalized_page_build(
-        &root,
-        &materialized,
-        &outputs.manifest_path,
-        &asset_dir,
-    )
-    .expect_err("digest drift in finalized CSS must fail closed");
+    let error =
+        materialize_finalized_page_build(&root, &materialized, &outputs.manifest_path, &asset_dir)
+            .expect_err("digest drift in finalized CSS must fail closed");
     let message = error.to_string().to_lowercase();
     assert!(
         message.contains("digest") || message.contains("sha256") || message.contains("hash"),
