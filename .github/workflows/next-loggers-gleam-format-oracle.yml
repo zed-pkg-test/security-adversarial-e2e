@@ -1,0 +1,35 @@
+name: next-loggers Gleam format acceptance
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/next-loggers-gleam-format-oracle.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gleam-format-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_LOGGERS_SHA: 9cb63c6952b035af4ec30c163feaf900846ef1a7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: '28'
+          gleam-version: '1.17.0'
+      - name: Fetch exact next-loggers source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init source
+          git -C source remote add origin https://github.com/ORESoftware/next-loggers.ts.git
+          git -C source fetch --no-tags --depth=1 origin "$NEXT_LOGGERS_SHA"
+          test "$(git -C source rev-parse FETCH_HEAD)" = "$NEXT_LOGGERS_SHA"
+          git -C source checkout --detach "$NEXT_LOGGERS_SHA"
+      - name: Verify canonical Gleam formatting
+        working-directory: source/sdk/gleam
+        run: gleam format --check src test
