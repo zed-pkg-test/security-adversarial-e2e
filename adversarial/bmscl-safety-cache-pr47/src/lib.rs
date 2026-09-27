@@ -85,7 +85,10 @@ impl DependencySafetyIdentity {
             ("artifact_sha256", self.artifact_sha256.as_str()),
             ("source_tree_sha256", self.source_tree_sha256.as_str()),
             ("policy_sha256", self.policy_sha256.as_str()),
-            ("analysis_policy_sha256", self.analysis_policy_sha256.as_str()),
+            (
+                "analysis_policy_sha256",
+                self.analysis_policy_sha256.as_str(),
+            ),
             (
                 "analyzer_public_key_sha256",
                 self.analyzer_public_key_sha256.as_str(),
@@ -177,7 +180,9 @@ impl DependencySafetyAttestation {
         expected: &DependencySafetyIdentity,
         key: &VerifyingKey,
     ) -> Result<()> {
-        if self.format != DEPENDENCY_SAFETY_FORMAT_V1 || self.verdict != DEPENDENCY_SAFETY_VERDICT_SAFE {
+        if self.format != DEPENDENCY_SAFETY_FORMAT_V1
+            || self.verdict != DEPENDENCY_SAFETY_VERDICT_SAFE
+        {
             bail!("dependency safety cache accepts only v1 positive safe attestations");
         }
         self.identity.validate()?;
@@ -185,11 +190,15 @@ impl DependencySafetyAttestation {
         verify_identity_key(expected, key)?;
         verify_identity_key(&self.identity, key)?;
         let actual_key = self.identity.cache_key_sha256()?;
-        if actual_key != self.key_sha256.to_ascii_lowercase() || actual_key != expected.cache_key_sha256()? {
+        if actual_key != self.key_sha256.to_ascii_lowercase()
+            || actual_key != expected.cache_key_sha256()?
+        {
             bail!("dependency safety attestation identity mismatch");
         }
-        let bytes = hex::decode(&self.signature_hex).context("dependency safety signature must be hexadecimal")?;
-        let signature = Signature::from_slice(&bytes).context("dependency safety signature must be 64 bytes")?;
+        let bytes = hex::decode(&self.signature_hex)
+            .context("dependency safety signature must be hexadecimal")?;
+        let signature = Signature::from_slice(&bytes)
+            .context("dependency safety signature must be 64 bytes")?;
         key.verify(&signature_payload(&actual_key)?, &signature)
             .context("dependency safety attestation signature verification failed")?;
         return Ok(());
@@ -204,20 +213,27 @@ pub fn store_verified(
     attestation.verify_safe(&attestation.identity, key)?;
     ensure_directory(root, "dependency safety cache root")?;
     let path = cache_path(root, &attestation.key_sha256)?;
-    let parent = path.parent().context("dependency safety cache path has no parent")?;
-    fs::create_dir_all(parent).with_context(|| format!("create cache directory {}", parent.display()))?;
+    let parent = path
+        .parent()
+        .context("dependency safety cache path has no parent")?;
+    fs::create_dir_all(parent)
+        .with_context(|| format!("create cache directory {}", parent.display()))?;
     ensure_directory_chain(root, parent)?;
     if path_exists(&path)? {
         load_record(&path)?.verify_safe(&attestation.identity, key)?;
         return Ok(path);
     }
-    let bytes = serde_json::to_vec_pretty(attestation).context("serialize dependency safety attestation")?;
+    let bytes = serde_json::to_vec_pretty(attestation)
+        .context("serialize dependency safety attestation")?;
     if bytes.len() as u64 > MAX_ATTESTATION_BYTES {
         bail!("dependency safety attestation exceeds size limit");
     }
     let mut temp = NamedTempFile::new_in(parent).context("create temporary cache object")?;
-    temp.write_all(&bytes).context("write dependency safety cache object")?;
-    temp.as_file_mut().sync_all().context("sync dependency safety cache object")?;
+    temp.write_all(&bytes)
+        .context("write dependency safety cache object")?;
+    temp.as_file_mut()
+        .sync_all()
+        .context("sync dependency safety cache object")?;
     match temp.persist_noclobber(&path) {
         Ok(_) => return Ok(path),
         Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => {
@@ -251,7 +267,10 @@ pub fn load_verified(
 pub fn cache_path(root: &Path, key_sha256: &str) -> Result<PathBuf> {
     validate_sha256(key_sha256, "cache key")?;
     let key = key_sha256.to_ascii_lowercase();
-    return Ok(root.join("v1/sha256").join(&key[..2]).join(format!("{key}.json")));
+    return Ok(root
+        .join("v1/sha256")
+        .join(&key[..2])
+        .join(format!("{key}.json")));
 }
 
 pub fn sha256_file(path: &Path) -> Result<String> {
@@ -276,26 +295,41 @@ pub fn sha256_tree_with_limits(root: &Path, limits: HashLimits) -> Result<String
         .max_depth(limits.max_tree_depth.saturating_add(1))
         .max_open(32)
     {
-        let entry = entry.with_context(|| format!("walk dependency source tree {}", root.display()))?;
+        let entry =
+            entry.with_context(|| format!("walk dependency source tree {}", root.display()))?;
         if entry.depth() == 0 {
             continue;
         }
-        entries_seen = entries_seen.checked_add(1).context("dependency entry count overflow")?;
+        entries_seen = entries_seen
+            .checked_add(1)
+            .context("dependency entry count overflow")?;
         if entries_seen > limits.max_tree_entries || entry.depth() > limits.max_tree_depth {
             bail!("dependency source tree exceeds traversal limits");
         }
         let kind = entry.file_type();
         if kind.is_symlink() {
-            bail!("dependency source tree contains symlink: {}", entry.path().display());
+            bail!(
+                "dependency source tree contains symlink: {}",
+                entry.path().display()
+            );
         }
         if kind.is_dir() {
             continue;
         }
         if !kind.is_file() {
-            bail!("dependency source tree contains special file: {}", entry.path().display());
+            bail!(
+                "dependency source tree contains special file: {}",
+                entry.path().display()
+            );
         }
-        let relative = entry.path().strip_prefix(root).context("derive dependency relative path")?;
-        let relative = relative.to_str().context("dependency source path must be UTF-8")?.replace('\\', "/");
+        let relative = entry
+            .path()
+            .strip_prefix(root)
+            .context("derive dependency relative path")?;
+        let relative = relative
+            .to_str()
+            .context("dependency source path must be UTF-8")?
+            .replace('\\', "/");
         if relative.len() > limits.max_relative_path_bytes {
             bail!("dependency source path exceeds byte limit");
         }
@@ -309,9 +343,14 @@ pub fn sha256_tree_with_limits(root: &Path, limits: HashLimits) -> Result<String
     let mut hasher = Sha256::new();
     hasher.update(b"bmscl-dependency-source-tree-v1\0");
     for (relative, path) in files {
-        let remaining = limits.max_tree_bytes.checked_sub(total).context("dependency byte count overflow")?;
+        let remaining = limits
+            .max_tree_bytes
+            .checked_sub(total)
+            .context("dependency byte count overflow")?;
         let (digest, bytes) = hash_regular_file(&path, remaining, "dependency source file")?;
-        total = total.checked_add(bytes).context("dependency byte count overflow")?;
+        total = total
+            .checked_add(bytes)
+            .context("dependency byte count overflow")?;
         hasher.update((relative.len() as u64).to_be_bytes());
         hasher.update(relative.as_bytes());
         hasher.update(bytes.to_be_bytes());
@@ -321,9 +360,13 @@ pub fn sha256_tree_with_limits(root: &Path, limits: HashLimits) -> Result<String
 }
 
 fn hash_regular_file(path: &Path, max_bytes: u64, label: &str) -> Result<([u8; 32], u64)> {
-    let metadata = fs::symlink_metadata(path).with_context(|| format!("stat {label} {}", path.display()))?;
+    let metadata =
+        fs::symlink_metadata(path).with_context(|| format!("stat {label} {}", path.display()))?;
     if !metadata.file_type().is_file() || metadata.len() > max_bytes {
-        bail!("{label} is not an allowed bounded regular file: {}", path.display());
+        bail!(
+            "{label} is not an allowed bounded regular file: {}",
+            path.display()
+        );
     }
     let mut file = File::open(path).with_context(|| format!("open {label} {}", path.display()))?;
     let opened = file.metadata().context("stat opened file")?;
@@ -334,11 +377,15 @@ fn hash_regular_file(path: &Path, max_bytes: u64, label: &str) -> Result<([u8; 3
     let mut buffer = [0u8; HASH_BUFFER_BYTES];
     let mut total = 0u64;
     loop {
-        let count = file.read(&mut buffer).with_context(|| format!("read {label}"))?;
+        let count = file
+            .read(&mut buffer)
+            .with_context(|| format!("read {label}"))?;
         if count == 0 {
             break;
         }
-        total = total.checked_add(count as u64).context("file byte count overflow")?;
+        total = total
+            .checked_add(count as u64)
+            .context("file byte count overflow")?;
         if total > max_bytes {
             bail!("{label} exceeds byte limit");
         }
@@ -353,7 +400,9 @@ fn load_record(path: &Path) -> Result<DependencySafetyAttestation> {
         bail!("dependency safety cache object is not an allowed bounded regular file");
     }
     let mut bytes = Vec::new();
-    File::open(path)?.take(MAX_ATTESTATION_BYTES + 1).read_to_end(&mut bytes)?;
+    File::open(path)?
+        .take(MAX_ATTESTATION_BYTES + 1)
+        .read_to_end(&mut bytes)?;
     if bytes.len() as u64 > MAX_ATTESTATION_BYTES {
         bail!("dependency safety cache object exceeds size limit");
     }
@@ -361,15 +410,21 @@ fn load_record(path: &Path) -> Result<DependencySafetyAttestation> {
 }
 
 fn ensure_directory(path: &Path, label: &str) -> Result<()> {
-    let metadata = fs::symlink_metadata(path).with_context(|| format!("stat {label} {}", path.display()))?;
+    let metadata =
+        fs::symlink_metadata(path).with_context(|| format!("stat {label} {}", path.display()))?;
     if !metadata.file_type().is_dir() {
-        bail!("{label} must be a non-symlink directory: {}", path.display());
+        bail!(
+            "{label} must be a non-symlink directory: {}",
+            path.display()
+        );
     }
     return Ok(());
 }
 
 fn ensure_directory_chain(root: &Path, parent: &Path) -> Result<()> {
-    let relative = parent.strip_prefix(root).context("cache shard escaped configured root")?;
+    let relative = parent
+        .strip_prefix(root)
+        .context("cache shard escaped configured root")?;
     let mut current = root.to_path_buf();
     for component in relative.components() {
         current.push(component.as_os_str());
@@ -409,7 +464,10 @@ fn signature_payload(key_sha256: &str) -> Result<Vec<u8>> {
 }
 
 fn validate_scalar(value: &str, label: &str) -> Result<()> {
-    if value.chars().any(|character| matches!(character, '\n' | '\r' | '\0')) {
+    if value
+        .chars()
+        .any(|character| matches!(character, '\n' | '\r' | '\0'))
+    {
         bail!("dependency safety identity {label} contains a control delimiter");
     }
     return Ok(());
@@ -469,7 +527,10 @@ mod tests {
                 "policy" => changed.policy_sha256 = digest('f'),
                 _ => changed.analysis_policy_sha256 = digest('f'),
             }
-            assert_ne!(first.cache_key_sha256().unwrap(), changed.cache_key_sha256().unwrap());
+            assert_ne!(
+                first.cache_key_sha256().unwrap(),
+                changed.cache_key_sha256().unwrap()
+            );
         }
     }
 
@@ -478,7 +539,8 @@ mod tests {
         let directory = tempdir().unwrap();
         let signing_key = key(7);
         let expected = identity(&signing_key);
-        let attestation = DependencySafetyAttestation::sign_safe(expected.clone(), &signing_key).unwrap();
+        let attestation =
+            DependencySafetyAttestation::sign_safe(expected.clone(), &signing_key).unwrap();
         store_verified(directory.path(), &attestation, &signing_key.verifying_key()).unwrap();
         assert_eq!(
             load_verified(directory.path(), &expected, &signing_key.verifying_key()).unwrap(),
@@ -492,9 +554,12 @@ mod tests {
         let directory = tempdir().unwrap();
         let signing_key = key(7);
         let expected = identity(&signing_key);
-        let attestation = DependencySafetyAttestation::sign_safe(expected.clone(), &signing_key).unwrap();
-        let path = store_verified(directory.path(), &attestation, &signing_key.verifying_key()).unwrap();
-        let mut value: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        let attestation =
+            DependencySafetyAttestation::sign_safe(expected.clone(), &signing_key).unwrap();
+        let path =
+            store_verified(directory.path(), &attestation, &signing_key.verifying_key()).unwrap();
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
         value["identity"]["profile"] = "tampered".into();
         fs::write(path, serde_json::to_vec(&value).unwrap()).unwrap();
         assert!(load_verified(directory.path(), &expected, &signing_key.verifying_key()).is_err());
@@ -521,9 +586,17 @@ mod tests {
     #[test]
     fn tree_digest_binds_contents() {
         let directory = tempdir().unwrap();
-        fs::write(directory.path().join("main.gleam"), "pub fn main() { Nil }\n").unwrap();
+        fs::write(
+            directory.path().join("main.gleam"),
+            "pub fn main() { Nil }\n",
+        )
+        .unwrap();
         let first = sha256_tree(directory.path()).unwrap();
-        fs::write(directory.path().join("main.gleam"), "pub fn main() { True }\n").unwrap();
+        fs::write(
+            directory.path().join("main.gleam"),
+            "pub fn main() { True }\n",
+        )
+        .unwrap();
         assert_ne!(first, sha256_tree(directory.path()).unwrap());
     }
 
@@ -542,7 +615,8 @@ mod tests {
         fs::create_dir(&real_cache).unwrap();
         symlink(&real_cache, &alias_cache).unwrap();
         let signing_key = key(7);
-        let attestation = DependencySafetyAttestation::sign_safe(identity(&signing_key), &signing_key).unwrap();
+        let attestation =
+            DependencySafetyAttestation::sign_safe(identity(&signing_key), &signing_key).unwrap();
         assert!(store_verified(&alias_cache, &attestation, &signing_key.verifying_key()).is_err());
     }
 }
