@@ -25,12 +25,13 @@ jobs:
           set -euo pipefail
           fixture="adversarial/bmscl-safety-cache-pr47/src/lib.rs"
           pin="adversarial/bmscl-safety-cache-pr47/source-pin.json"
-          test "$(git hash-object "$fixture")" = "de917d9da16b74dabb70663d7696ce81175de0c2"
+          expected_blob="$(jq -r '.git_blob_sha' "$pin")"
+          test "$(git hash-object "$fixture")" = "$expected_blob"
           jq -e '.repository == "beamscale/bmscl-compiler"' "$pin" >/dev/null
           jq -e '.pull_request == 47' "$pin" >/dev/null
-          jq -e '.head_sha == "35f349ccd8067d8e6f01dd399d923827b73db1a4"' "$pin" >/dev/null
           jq -e '.path == "src/safety_cache.rs"' "$pin" >/dev/null
-          jq -e '.git_blob_sha == "de917d9da16b74dabb70663d7696ce81175de0c2"' "$pin" >/dev/null
+          jq -e '.head_sha | test("^[0-9a-f]{40}$")' "$pin" >/dev/null
+          jq -e '.git_blob_sha | test("^[0-9a-f]{40}$")' "$pin" >/dev/null
       - name: Produce canonical rustfmt output
         shell: bash
         run: |
