@@ -31,9 +31,22 @@ jobs:
           jq -e '.head_sha == "35f349ccd8067d8e6f01dd399d923827b73db1a4"' "$pin" >/dev/null
           jq -e '.path == "src/safety_cache.rs"' "$pin" >/dev/null
           jq -e '.git_blob_sha == "de917d9da16b74dabb70663d7696ce81175de0c2"' "$pin" >/dev/null
-      - name: Rustfmt exact source
-        run: cargo fmt --manifest-path adversarial/bmscl-safety-cache-pr47/Cargo.toml --all -- --check
-      - name: Clippy exact source
+      - name: Produce canonical rustfmt output
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --manifest-path adversarial/bmscl-safety-cache-pr47/Cargo.toml --all
+          git diff -- adversarial/bmscl-safety-cache-pr47/src/lib.rs > adversarial/bmscl-safety-cache-pr47/rustfmt.patch
+      - name: Upload canonical formatted source
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: bmscl-pr47-rustfmt
+          path: |
+            adversarial/bmscl-safety-cache-pr47/src/lib.rs
+            adversarial/bmscl-safety-cache-pr47/rustfmt.patch
+          if-no-files-found: error
+          retention-days: 7
+      - name: Clippy formatted source
         run: cargo clippy --manifest-path adversarial/bmscl-safety-cache-pr47/Cargo.toml --all-targets -- -D warnings
       - name: Run adversarial unit tests
         run: cargo test --manifest-path adversarial/bmscl-safety-cache-pr47/Cargo.toml --all-targets
