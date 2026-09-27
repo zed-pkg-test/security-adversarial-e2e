@@ -1,0 +1,40 @@
+name: bmscl safety cache PR47 proof
+
+on:
+  pull_request:
+    paths:
+      - "adversarial/bmscl-safety-cache-pr47/**"
+      - ".github/workflows/bmscl-safety-cache-pr47.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          components: rustfmt, clippy
+      - name: Verify exact private-upstream source blob pin
+        shell: bash
+        run: |
+          set -euo pipefail
+          fixture="adversarial/bmscl-safety-cache-pr47/src/lib.rs"
+          pin="adversarial/bmscl-safety-cache-pr47/source-pin.json"
+          expected_blob="$(jq -r '.git_blob_sha' "$pin")"
+          test "$(git hash-object "$fixture")" = "$expected_blob"
+          jq -e '.repository == "beamscale/bmscl-compiler"' "$pin" >/dev/null
+          jq -e '.pull_request == 47' "$pin" >/dev/null
+          jq -e '.path == "src/safety_cache.rs"' "$pin" >/dev/null
+          jq -e '.head_sha | test("^[0-9a-f]{40}$")' "$pin" >/dev/null
+          jq -e '.git_blob_sha | test("^[0-9a-f]{40}$")' "$pin" >/dev/null
+      - name: Verify rustfmt without mutation
+        run: cargo fmt --manifest-path adversarial/bmscl-safety-cache-pr47/Cargo.toml --all -- --check
+      - name: Clippy exact source
+        run: cargo clippy --manifest-path adversarial/bmscl-safety-cache-pr47/Cargo.toml --all-targets -- -D warnings
+      - name: Run adversarial unit tests on exact source
+        run: cargo test --manifest-path adversarial/bmscl-safety-cache-pr47/Cargo.toml --all-targets
