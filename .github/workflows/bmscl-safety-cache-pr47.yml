@@ -32,44 +32,9 @@ jobs:
           jq -e '.path == "src/safety_cache.rs"' "$pin" >/dev/null
           jq -e '.head_sha | test("^[0-9a-f]{40}$")' "$pin" >/dev/null
           jq -e '.git_blob_sha | test("^[0-9a-f]{40}$")' "$pin" >/dev/null
-      - name: Produce canonical rustfmt output
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo fmt --manifest-path adversarial/bmscl-safety-cache-pr47/Cargo.toml --all
-          git diff -- adversarial/bmscl-safety-cache-pr47/src/lib.rs > adversarial/bmscl-safety-cache-pr47/rustfmt.patch
-      - name: Clippy formatted source
-        id: clippy
-        shell: bash
-        run: |
-          set +e
-          cargo clippy --manifest-path adversarial/bmscl-safety-cache-pr47/Cargo.toml --all-targets -- -D warnings 2>&1 | tee adversarial/bmscl-safety-cache-pr47/clippy.log
-          status=${PIPESTATUS[0]}
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-          exit 0
-      - name: Run adversarial unit tests
-        id: tests
-        shell: bash
-        run: |
-          set +e
-          cargo test --manifest-path adversarial/bmscl-safety-cache-pr47/Cargo.toml --all-targets 2>&1 | tee adversarial/bmscl-safety-cache-pr47/tests.log
-          status=${PIPESTATUS[0]}
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-          exit 0
-      - name: Upload proof diagnostics
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: bmscl-pr47-proof-diagnostics
-          path: |
-            adversarial/bmscl-safety-cache-pr47/src/lib.rs
-            adversarial/bmscl-safety-cache-pr47/rustfmt.patch
-            adversarial/bmscl-safety-cache-pr47/clippy.log
-            adversarial/bmscl-safety-cache-pr47/tests.log
-          if-no-files-found: error
-          retention-days: 7
-      - name: Enforce proof results
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "${{ steps.clippy.outputs.status }}" = "0"
-          test "${{ steps.tests.outputs.status }}" = "0"
+      - name: Verify rustfmt without mutation
+        run: cargo fmt --manifest-path adversarial/bmscl-safety-cache-pr47/Cargo.toml --all -- --check
+      - name: Clippy exact source
+        run: cargo clippy --manifest-path adversarial/bmscl-safety-cache-pr47/Cargo.toml --all-targets -- -D warnings
+      - name: Run adversarial unit tests on exact source
+        run: cargo test --manifest-path adversarial/bmscl-safety-cache-pr47/Cargo.toml --all-targets
