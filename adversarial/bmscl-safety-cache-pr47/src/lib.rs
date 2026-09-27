@@ -40,12 +40,6 @@ impl Default for HashLimits {
     }
 }
 
-/// Exact identity of dependency bytes admitted for the Hosted Gleam profile.
-///
-/// A package name/version is intentionally insufficient. Reuse is valid only
-/// when immutable package bytes, extracted source tree, analyzer semantics,
-/// current security-analysis policy, trust key, compiler/backend, and hosted
-/// profile identity all match.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct DependencySafetyIdentity {
@@ -67,104 +61,92 @@ pub struct DependencySafetyIdentity {
 
 impl DependencySafetyIdentity {
     pub fn validate(&self) -> Result<()> {
-        if self.package.trim().is_empty() {
-            bail!("dependency safety identity requires package name");
-        }
-        if self.version.trim().is_empty() {
-            bail!("dependency safety identity requires package version");
+        for (name, value) in [
+            ("package", self.package.as_str()),
+            ("version", self.version.as_str()),
+            ("analyzer_revision", self.analyzer_revision.as_str()),
+            ("analyzer_key_id", self.analyzer_key_id.as_str()),
+            ("gleam_version", self.gleam_version.as_str()),
+            ("profile", self.profile.as_str()),
+        ] {
+            if value.trim().is_empty() {
+                bail!("dependency safety identity requires {name}");
+            }
+            validate_scalar(value, name)?;
         }
         if self.source != "hex" {
             bail!("dependency safety identity source must be `hex`");
         }
-        if self.analyzer_revision.trim().is_empty() {
-            bail!("dependency safety identity requires analyzer revision");
-        }
-        if self.analyzer_key_id.trim().is_empty() {
-            bail!("dependency safety identity requires analyzer key id");
-        }
-        if self.gleam_version.trim().is_empty() {
-            bail!("dependency safety identity requires Gleam version");
-        }
         if self.target != "erlang" {
             bail!("dependency safety identity target must be `erlang`");
         }
-        if self.profile.trim().is_empty() {
-            bail!("dependency safety identity requires profile");
+        for (name, value) in [
+            ("upstream_checksum", self.upstream_checksum.as_str()),
+            ("artifact_sha256", self.artifact_sha256.as_str()),
+            ("source_tree_sha256", self.source_tree_sha256.as_str()),
+            ("policy_sha256", self.policy_sha256.as_str()),
+            ("analysis_policy_sha256", self.analysis_policy_sha256.as_str()),
+            (
+                "analyzer_public_key_sha256",
+                self.analyzer_public_key_sha256.as_str(),
+            ),
+        ] {
+            validate_sha256(value, name)?;
         }
-
-        canonical_scalar(&self.package)?;
-        canonical_scalar(&self.version)?;
-        canonical_scalar(&self.source)?;
-        canonical_scalar(&self.analyzer_revision)?;
-        canonical_scalar(&self.analyzer_key_id)?;
-        canonical_scalar(&self.gleam_version)?;
-        canonical_scalar(&self.target)?;
-        canonical_scalar(&self.profile)?;
-
-        validate_sha256(&self.upstream_checksum, "upstream_checksum")?;
-        validate_sha256(&self.artifact_sha256, "artifact_sha256")?;
-        validate_sha256(&self.source_tree_sha256, "source_tree_sha256")?;
-        validate_sha256(&self.policy_sha256, "policy_sha256")?;
-        validate_sha256(&self.analysis_policy_sha256, "analysis_policy_sha256")?;
-        validate_sha256(
-            &self.analyzer_public_key_sha256,
-            "analyzer_public_key_sha256",
-        )?;
-
         return Ok(());
     }
 
-    /// Stable, line-delimited representation used only for key derivation.
-    /// Field order is part of the v1 cache contract.
     pub fn canonical_payload(&self) -> Result<Vec<u8>> {
         self.validate()?;
-        let payload = format!(
-            concat!(
-                "format={DEPENDENCY_SAFETY_FORMAT_V1}\n",
-                "package={}\n",
-                "version={}\n",
-                "source={}\n",
-                "upstream_checksum={}\n",
-                "artifact_sha256={}\n",
-                "source_tree_sha256={}\n",
-                "policy_sha256={}\n",
-                "analysis_policy_sha256={}\n",
-                "analyzer_revision={}\n",
-                "analyzer_key_id={}\n",
-                "analyzer_public_key_sha256={}\n",
-                "gleam_version={}\n",
-                "target={}\n",
-                "profile={}\n"
-            ),
-            canonical_scalar(&self.package)?,
-            canonical_scalar(&self.version)?,
-            canonical_scalar(&self.source)?,
+        let values = [
+            DEPENDENCY_SAFETY_FORMAT_V1.to_string(),
+            self.package.clone(),
+            self.version.clone(),
+            self.source.clone(),
             self.upstream_checksum.to_ascii_lowercase(),
             self.artifact_sha256.to_ascii_lowercase(),
             self.source_tree_sha256.to_ascii_lowercase(),
             self.policy_sha256.to_ascii_lowercase(),
             self.analysis_policy_sha256.to_ascii_lowercase(),
-            canonical_scalar(&self.analyzer_revision)?,
-            canonical_scalar(&self.analyzer_key_id)?,
+            self.analyzer_revision.clone(),
+            self.analyzer_key_id.clone(),
             self.analyzer_public_key_sha256.to_ascii_lowercase(),
-            canonical_scalar(&self.gleam_version)?,
-            canonical_scalar(&self.target)?,
-            canonical_scalar(&self.profile)?,
-        );
+            self.gleam_version.clone(),
+            self.target.clone(),
+            self.profile.clone(),
+        ];
+        let names = [
+            "format",
+            "package",
+            "version",
+            "source",
+            "upstream_checksum",
+            "artifact_sha256",
+            "source_tree_sha256",
+            "policy_sha256",
+            "analysis_policy_sha256",
+            "analyzer_revision",
+            "analyzer_key_id",
+            "analyzer_public_key_sha256",
+            "gleam_version",
+            "target",
+            "profile",
+        ];
+        let mut payload = String::new();
+        for (name, value) in names.into_iter().zip(values) {
+            payload.push_str(name);
+            payload.push('=');
+            payload.push_str(&value);
+            payload.push('\n');
+        }
         return Ok(payload.into_bytes());
     }
 
     pub fn cache_key_sha256(&self) -> Result<String> {
-        let payload = self.canonical_payload()?;
-        return Ok(sha256_bytes(&payload));
+        return Ok(sha256_bytes(&self.canonical_payload()?));
     }
 }
 
-/// Positive dependency-safety result signed by the trusted BeamScale analyzer.
-///
-/// The signature makes a shared cache safe to reuse across nodes even if the
-/// CAS object store itself is not a trust root. A valid artifact digest alone
-/// proves identity, not that the bytes satisfy the Hosted Gleam policy.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct DependencySafetyAttestation {
@@ -176,20 +158,14 @@ pub struct DependencySafetyAttestation {
 }
 
 impl DependencySafetyAttestation {
-    pub fn sign_safe(
-        identity: DependencySafetyIdentity,
-        signing_key: &SigningKey,
-    ) -> Result<Self> {
+    pub fn sign_safe(identity: DependencySafetyIdentity, key: &SigningKey) -> Result<Self> {
         identity.validate()?;
-        verify_identity_key(&identity, &signing_key.verifying_key())?;
-
+        verify_identity_key(&identity, &key.verifying_key())?;
         let key_sha256 = identity.cache_key_sha256()?;
-        let payload = signature_payload(&key_sha256)?;
-        let signature = signing_key.sign(&payload);
-
+        let signature = key.sign(&signature_payload(&key_sha256)?);
         return Ok(Self {
-            format: DEPENDENCY_SAFETY_FORMAT_V1.to_string(),
-            verdict: DEPENDENCY_SAFETY_VERDICT_SAFE.to_string(),
+            format: DEPENDENCY_SAFETY_FORMAT_V1.into(),
+            verdict: DEPENDENCY_SAFETY_VERDICT_SAFE.into(),
             key_sha256,
             identity,
             signature_hex: hex::encode(signature.to_bytes()),
@@ -198,170 +174,86 @@ impl DependencySafetyAttestation {
 
     pub fn verify_safe(
         &self,
-        expected_identity: &DependencySafetyIdentity,
-        verifying_key: &VerifyingKey,
+        expected: &DependencySafetyIdentity,
+        key: &VerifyingKey,
     ) -> Result<()> {
-        if self.format != DEPENDENCY_SAFETY_FORMAT_V1 {
-            bail!("unsupported dependency safety attestation format `{}`", self.format);
+        if self.format != DEPENDENCY_SAFETY_FORMAT_V1 || self.verdict != DEPENDENCY_SAFETY_VERDICT_SAFE {
+            bail!("dependency safety cache accepts only v1 positive safe attestations");
         }
-        if self.verdict != DEPENDENCY_SAFETY_VERDICT_SAFE {
-            bail!("dependency safety cache accepts positive `safe` attestations only");
-        }
-
-        validate_sha256(&self.key_sha256, "key_sha256")?;
         self.identity.validate()?;
-        expected_identity.validate()?;
-        verify_identity_key(expected_identity, verifying_key)?;
-        verify_identity_key(&self.identity, verifying_key)?;
-
-        let record_key = self.identity.cache_key_sha256()?;
-        if record_key != self.key_sha256.to_ascii_lowercase() {
-            bail!("dependency safety attestation key does not match embedded identity");
+        expected.validate()?;
+        verify_identity_key(expected, key)?;
+        verify_identity_key(&self.identity, key)?;
+        let actual_key = self.identity.cache_key_sha256()?;
+        if actual_key != self.key_sha256.to_ascii_lowercase() || actual_key != expected.cache_key_sha256()? {
+            bail!("dependency safety attestation identity mismatch");
         }
-
-        let expected_key = expected_identity.cache_key_sha256()?;
-        if expected_key != record_key {
-            bail!("dependency safety attestation does not match requested dependency identity");
-        }
-
-        let signature_bytes = hex::decode(&self.signature_hex)
-            .context("dependency safety signature must be hexadecimal")?;
-        let signature = Signature::from_slice(&signature_bytes)
-            .context("dependency safety signature must be exactly 64 bytes")?;
-        let payload = signature_payload(&record_key)?;
-        verifying_key
-            .verify(&payload, &signature)
+        let bytes = hex::decode(&self.signature_hex).context("dependency safety signature must be hexadecimal")?;
+        let signature = Signature::from_slice(&bytes).context("dependency safety signature must be 64 bytes")?;
+        key.verify(&signature_payload(&actual_key)?, &signature)
             .context("dependency safety attestation signature verification failed")?;
-
         return Ok(());
     }
 }
 
-/// Persist a verified positive safety attestation in an immutable local CAS.
-/// Existing objects are never overwritten. Shared/distributed stores should
-/// preserve the same key + signature contract.
-///
-/// `root` must already exist as a trusted build-service-owned directory. It
-/// must never be a tenant-controlled path. Requiring the configured root to
-/// preexist prevents this function from following a tenant-planted root
-/// symlink while creating cache directories.
 pub fn store_verified(
     root: &Path,
     attestation: &DependencySafetyAttestation,
-    verifying_key: &VerifyingKey,
+    key: &VerifyingKey,
 ) -> Result<PathBuf> {
-    attestation.verify_safe(&attestation.identity, verifying_key)?;
+    attestation.verify_safe(&attestation.identity, key)?;
     ensure_directory(root, "dependency safety cache root")?;
-
     let path = cache_path(root, &attestation.key_sha256)?;
     let parent = path.parent().context("dependency safety cache path has no parent")?;
-    fs::create_dir_all(parent)
-        .with_context(|| format!("create dependency safety cache directory {}", parent.display()))?;
-    ensure_cache_directory_chain(root, parent)?;
-
-    match fs::symlink_metadata(&path) {
-        Ok(_) => {
-            let existing = load_record_at(&path)?;
-            existing.verify_safe(&attestation.identity, verifying_key)?;
-            return Ok(path);
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => {
-            return Err(error)
-                .with_context(|| format!("stat dependency safety cache object {}", path.display()));
-        }
+    fs::create_dir_all(parent).with_context(|| format!("create cache directory {}", parent.display()))?;
+    ensure_directory_chain(root, parent)?;
+    if path_exists(&path)? {
+        load_record(&path)?.verify_safe(&attestation.identity, key)?;
+        return Ok(path);
     }
-
-    let bytes = serde_json::to_vec_pretty(attestation)
-        .context("serialize dependency safety attestation")?;
+    let bytes = serde_json::to_vec_pretty(attestation).context("serialize dependency safety attestation")?;
     if bytes.len() as u64 > MAX_ATTESTATION_BYTES {
         bail!("dependency safety attestation exceeds size limit");
     }
-
-    let mut temporary = NamedTempFile::new_in(parent)
-        .with_context(|| format!("create temporary cache object in {}", parent.display()))?;
-    temporary
-        .write_all(&bytes)
-        .context("write dependency safety cache object")?;
-    temporary
-        .as_file_mut()
-        .sync_all()
-        .context("sync dependency safety cache object")?;
-
-    match temporary.persist_noclobber(&path) {
-        Ok(_) => {
-            return Ok(path);
-        }
+    let mut temp = NamedTempFile::new_in(parent).context("create temporary cache object")?;
+    temp.write_all(&bytes).context("write dependency safety cache object")?;
+    temp.as_file_mut().sync_all().context("sync dependency safety cache object")?;
+    match temp.persist_noclobber(&path) {
+        Ok(_) => return Ok(path),
         Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => {
-            let existing = load_record_at(&path)?;
-            existing.verify_safe(&attestation.identity, verifying_key)?;
+            load_record(&path)?.verify_safe(&attestation.identity, key)?;
             return Ok(path);
         }
-        Err(error) => {
-            return Err(error.error).with_context(|| {
-                format!("persist dependency safety cache object {}", path.display())
-            });
-        }
+        Err(error) => return Err(error.error).context("persist dependency safety cache object"),
     }
 }
 
-/// Load a cache hit only if identity, trust-key fingerprint, and analyzer
-/// signature are valid. Missing objects are ordinary misses; malformed or
-/// tampered objects fail closed.
 pub fn load_verified(
     root: &Path,
     identity: &DependencySafetyIdentity,
-    verifying_key: &VerifyingKey,
+    key: &VerifyingKey,
 ) -> Result<Option<DependencySafetyAttestation>> {
     identity.validate()?;
-    verify_identity_key(identity, verifying_key)?;
-
-    match fs::symlink_metadata(root) {
-        Ok(metadata) => {
-            if !metadata.file_type().is_dir() {
-                bail!("dependency safety cache root must be a non-symlink directory");
-            }
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(None);
-        }
-        Err(error) => {
-            return Err(error)
-                .with_context(|| format!("stat dependency safety cache root {}", root.display()));
-        }
+    verify_identity_key(identity, key)?;
+    if !path_exists(root)? {
+        return Ok(None);
     }
-
-    let key_sha256 = identity.cache_key_sha256()?;
-    let path = cache_path(root, &key_sha256)?;
-    match fs::symlink_metadata(&path) {
-        Ok(_) => {}
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(None);
-        }
-        Err(error) => {
-            return Err(error)
-                .with_context(|| format!("stat dependency safety cache object {}", path.display()));
-        }
+    ensure_directory(root, "dependency safety cache root")?;
+    let path = cache_path(root, &identity.cache_key_sha256()?)?;
+    if !path_exists(&path)? {
+        return Ok(None);
     }
-
-    let record = load_record_at(&path)?;
-    record.verify_safe(identity, verifying_key)?;
+    let record = load_record(&path)?;
+    record.verify_safe(identity, key)?;
     return Ok(Some(record));
 }
 
 pub fn cache_path(root: &Path, key_sha256: &str) -> Result<PathBuf> {
     validate_sha256(key_sha256, "cache key")?;
     let key = key_sha256.to_ascii_lowercase();
-    let prefix = &key[..2];
-    return Ok(root
-        .join("v1")
-        .join("sha256")
-        .join(prefix)
-        .join(format!("{key}.json")));
+    return Ok(root.join("v1/sha256").join(&key[..2]).join(format!("{key}.json")));
 }
 
-/// SHA-256 of an exact downloaded package artifact, bounded to prevent an
-/// attacker-controlled package from forcing an unbounded allocation or read.
 pub fn sha256_file(path: &Path) -> Result<String> {
     return sha256_file_with_limit(path, HashLimits::default().max_artifact_bytes);
 }
@@ -371,27 +263,12 @@ pub fn sha256_file_with_limit(path: &Path, max_bytes: u64) -> Result<String> {
     return Ok(hex::encode(digest));
 }
 
-/// Deterministic digest of the extracted dependency source tree.
-///
-/// Paths and file bytes are both bound into the digest. Symlinks and unusual
-/// filesystem object types are rejected. Traversal is bounded by total entry
-/// count, file count, depth, aggregate bytes, and relative-path length so a
-/// malicious archive cannot turn cache-key derivation into a resource attack.
-///
-/// The caller must materialize a read-only/frozen snapshot and keep that exact
-/// snapshot stable through hashing, analysis, and compilation. A mutable tree
-/// would create a hash/analyze/build TOCTOU boundary that no cache key can fix.
 pub fn sha256_tree(root: &Path) -> Result<String> {
     return sha256_tree_with_limits(root, HashLimits::default());
 }
 
 pub fn sha256_tree_with_limits(root: &Path, limits: HashLimits) -> Result<String> {
-    let root_metadata = fs::symlink_metadata(root)
-        .with_context(|| format!("stat dependency source tree {}", root.display()))?;
-    if !root_metadata.file_type().is_dir() {
-        bail!("dependency source tree must be a directory: {}", root.display());
-    }
-
+    ensure_directory(root, "dependency source tree")?;
     let mut entries_seen = 0u64;
     let mut files = Vec::new();
     for entry in WalkDir::new(root)
@@ -403,159 +280,96 @@ pub fn sha256_tree_with_limits(root: &Path, limits: HashLimits) -> Result<String
         if entry.depth() == 0 {
             continue;
         }
-
-        entries_seen = entries_seen
-            .checked_add(1)
-            .context("dependency source tree entry accounting overflow")?;
-        if entries_seen > limits.max_tree_entries {
-            bail!("dependency source tree exceeds entry-count limit");
+        entries_seen = entries_seen.checked_add(1).context("dependency entry count overflow")?;
+        if entries_seen > limits.max_tree_entries || entry.depth() > limits.max_tree_depth {
+            bail!("dependency source tree exceeds traversal limits");
         }
-        if entry.depth() > limits.max_tree_depth {
-            bail!("dependency source tree exceeds depth limit");
-        }
-
-        let file_type = entry.file_type();
-        if file_type.is_symlink() {
+        let kind = entry.file_type();
+        if kind.is_symlink() {
             bail!("dependency source tree contains symlink: {}", entry.path().display());
         }
-        if file_type.is_dir() {
+        if kind.is_dir() {
             continue;
         }
-        if !file_type.is_file() {
-            bail!(
-                "dependency source tree contains unsupported filesystem object: {}",
-                entry.path().display()
-            );
+        if !kind.is_file() {
+            bail!("dependency source tree contains special file: {}", entry.path().display());
         }
-
-        let relative = entry
-            .path()
-            .strip_prefix(root)
-            .with_context(|| format!("derive relative dependency path {}", entry.path().display()))?;
-        let relative = relative
-            .to_str()
-            .context("dependency source path must be UTF-8")?
-            .replace('\\', "/");
+        let relative = entry.path().strip_prefix(root).context("derive dependency relative path")?;
+        let relative = relative.to_str().context("dependency source path must be UTF-8")?.replace('\\', "/");
         if relative.len() > limits.max_relative_path_bytes {
-            bail!("dependency source path exceeds byte limit: {relative}");
+            bail!("dependency source path exceeds byte limit");
         }
-
         files.push((relative, entry.into_path()));
         if files.len() as u64 > limits.max_tree_files {
             bail!("dependency source tree exceeds file-count limit");
         }
     }
-
     files.sort_by(|left, right| left.0.cmp(&right.0));
-    let mut total_bytes = 0u64;
+    let mut total = 0u64;
     let mut hasher = Sha256::new();
     hasher.update(b"bmscl-dependency-source-tree-v1\0");
-
     for (relative, path) in files {
-        let remaining = limits
-            .max_tree_bytes
-            .checked_sub(total_bytes)
-            .context("dependency source tree byte accounting overflow")?;
-        let (file_digest, file_bytes) =
-            hash_regular_file(&path, remaining, "dependency source file")?;
-        total_bytes = total_bytes
-            .checked_add(file_bytes)
-            .context("dependency source tree byte accounting overflow")?;
-        if total_bytes > limits.max_tree_bytes {
-            bail!("dependency source tree exceeds aggregate byte limit");
-        }
-
+        let remaining = limits.max_tree_bytes.checked_sub(total).context("dependency byte count overflow")?;
+        let (digest, bytes) = hash_regular_file(&path, remaining, "dependency source file")?;
+        total = total.checked_add(bytes).context("dependency byte count overflow")?;
         hasher.update((relative.len() as u64).to_be_bytes());
         hasher.update(relative.as_bytes());
-        hasher.update(file_bytes.to_be_bytes());
-        hasher.update(file_digest);
+        hasher.update(bytes.to_be_bytes());
+        hasher.update(digest);
     }
-
     return Ok(hex::encode(hasher.finalize()));
 }
 
 fn hash_regular_file(path: &Path, max_bytes: u64, label: &str) -> Result<([u8; 32], u64)> {
-    let link_metadata = fs::symlink_metadata(path)
-        .with_context(|| format!("stat {label} {}", path.display()))?;
-    if !link_metadata.file_type().is_file() {
-        bail!("{label} must be a regular file: {}", path.display());
+    let metadata = fs::symlink_metadata(path).with_context(|| format!("stat {label} {}", path.display()))?;
+    if !metadata.file_type().is_file() || metadata.len() > max_bytes {
+        bail!("{label} is not an allowed bounded regular file: {}", path.display());
     }
-    if link_metadata.len() > max_bytes {
-        bail!("{label} exceeds byte limit: {}", path.display());
+    let mut file = File::open(path).with_context(|| format!("open {label} {}", path.display()))?;
+    let opened = file.metadata().context("stat opened file")?;
+    if !opened.file_type().is_file() || opened.len() > max_bytes {
+        bail!("{label} changed or exceeds byte limit: {}", path.display());
     }
-
-    let mut file = File::open(path)
-        .with_context(|| format!("open {label} {}", path.display()))?;
-    let opened_metadata = file
-        .metadata()
-        .with_context(|| format!("stat open {label} {}", path.display()))?;
-    if !opened_metadata.file_type().is_file() {
-        bail!("{label} changed away from a regular file: {}", path.display());
-    }
-    if opened_metadata.len() > max_bytes {
-        bail!("{label} exceeds byte limit: {}", path.display());
-    }
-
     let mut hasher = Sha256::new();
     let mut buffer = [0u8; HASH_BUFFER_BYTES];
     let mut total = 0u64;
     loop {
-        let read = file
-            .read(&mut buffer)
-            .with_context(|| format!("read {label} {}", path.display()))?;
-        if read == 0 {
+        let count = file.read(&mut buffer).with_context(|| format!("read {label}"))?;
+        if count == 0 {
             break;
         }
-        total = total
-            .checked_add(read as u64)
-            .context("file byte accounting overflow")?;
+        total = total.checked_add(count as u64).context("file byte count overflow")?;
         if total > max_bytes {
-            bail!("{label} exceeds byte limit: {}", path.display());
+            bail!("{label} exceeds byte limit");
         }
-        hasher.update(&buffer[..read]);
+        hasher.update(&buffer[..count]);
     }
-
     return Ok((hasher.finalize().into(), total));
 }
 
-fn load_record_at(path: &Path) -> Result<DependencySafetyAttestation> {
-    let metadata = fs::symlink_metadata(path)
-        .with_context(|| format!("stat dependency safety cache object {}", path.display()))?;
-    if !metadata.file_type().is_file() {
-        bail!("dependency safety cache object must be a regular file: {}", path.display());
+fn load_record(path: &Path) -> Result<DependencySafetyAttestation> {
+    let metadata = fs::symlink_metadata(path).context("stat dependency safety cache object")?;
+    if !metadata.file_type().is_file() || metadata.len() > MAX_ATTESTATION_BYTES {
+        bail!("dependency safety cache object is not an allowed bounded regular file");
     }
-    if metadata.len() > MAX_ATTESTATION_BYTES {
-        bail!("dependency safety cache object exceeds size limit: {}", path.display());
-    }
-
     let mut bytes = Vec::new();
-    File::open(path)
-        .with_context(|| format!("open dependency safety cache object {}", path.display()))?
-        .take(MAX_ATTESTATION_BYTES + 1)
-        .read_to_end(&mut bytes)
-        .with_context(|| format!("read dependency safety cache object {}", path.display()))?;
+    File::open(path)?.take(MAX_ATTESTATION_BYTES + 1).read_to_end(&mut bytes)?;
     if bytes.len() as u64 > MAX_ATTESTATION_BYTES {
-        bail!("dependency safety cache object exceeds size limit: {}", path.display());
+        bail!("dependency safety cache object exceeds size limit");
     }
-
-    let record = serde_json::from_slice(&bytes)
-        .with_context(|| format!("parse dependency safety cache object {}", path.display()))?;
-    return Ok(record);
+    return serde_json::from_slice(&bytes).context("parse dependency safety cache object");
 }
 
 fn ensure_directory(path: &Path, label: &str) -> Result<()> {
-    let metadata = fs::symlink_metadata(path)
-        .with_context(|| format!("stat {label} {}", path.display()))?;
+    let metadata = fs::symlink_metadata(path).with_context(|| format!("stat {label} {}", path.display()))?;
     if !metadata.file_type().is_dir() {
         bail!("{label} must be a non-symlink directory: {}", path.display());
     }
     return Ok(());
 }
 
-fn ensure_cache_directory_chain(root: &Path, parent: &Path) -> Result<()> {
-    let relative = parent
-        .strip_prefix(root)
-        .context("dependency safety cache shard escaped configured root")?;
+fn ensure_directory_chain(root: &Path, parent: &Path) -> Result<()> {
+    let relative = parent.strip_prefix(root).context("cache shard escaped configured root")?;
     let mut current = root.to_path_buf();
     for component in relative.components() {
         current.push(component.as_os_str());
@@ -564,35 +378,41 @@ fn ensure_cache_directory_chain(root: &Path, parent: &Path) -> Result<()> {
     return Ok(());
 }
 
-fn verify_identity_key(
-    identity: &DependencySafetyIdentity,
-    verifying_key: &VerifyingKey,
-) -> Result<()> {
-    let actual = public_key_sha256(verifying_key);
-    if actual != identity.analyzer_public_key_sha256.to_ascii_lowercase() {
+fn path_exists(path: &Path) -> Result<bool> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => return Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error).with_context(|| format!("stat {}", path.display())),
+    }
+}
+
+pub fn public_key_sha256(key: &VerifyingKey) -> String {
+    return sha256_bytes(&key.to_bytes());
+}
+
+fn verify_identity_key(identity: &DependencySafetyIdentity, key: &VerifyingKey) -> Result<()> {
+    if identity.analyzer_public_key_sha256.to_ascii_lowercase() != public_key_sha256(key) {
         bail!("dependency safety analyzer public key does not match identity fingerprint");
     }
     return Ok(());
 }
 
-pub fn public_key_sha256(verifying_key: &VerifyingKey) -> String {
-    return sha256_bytes(&verifying_key.to_bytes());
-}
-
 fn signature_payload(key_sha256: &str) -> Result<Vec<u8>> {
     validate_sha256(key_sha256, "key_sha256")?;
-    let payload = format!(
-        "format={DEPENDENCY_SAFETY_FORMAT_V1}\nverdict={DEPENDENCY_SAFETY_VERDICT_SAFE}\nkey_sha256={}\n",
-        key_sha256.to_ascii_lowercase(),
-    );
-    return Ok(payload.into_bytes());
+    return Ok(format!(
+        "format={}\nverdict={}\nkey_sha256={}\n",
+        DEPENDENCY_SAFETY_FORMAT_V1,
+        DEPENDENCY_SAFETY_VERDICT_SAFE,
+        key_sha256.to_ascii_lowercase()
+    )
+    .into_bytes());
 }
 
-fn canonical_scalar(value: &str) -> Result<&str> {
-    if value.contains('\n') || value.contains('\r') || value.contains('\0') {
-        bail!("dependency safety identity fields cannot contain control delimiters");
+fn validate_scalar(value: &str, label: &str) -> Result<()> {
+    if value.chars().any(|character| matches!(character, '\n' | '\r' | '\0')) {
+        bail!("dependency safety identity {label} contains a control delimiter");
     }
-    return Ok(value);
+    return Ok(());
 }
 
 fn validate_sha256(value: &str, label: &str) -> Result<()> {
@@ -603,26 +423,23 @@ fn validate_sha256(value: &str, label: &str) -> Result<()> {
 }
 
 fn sha256_bytes(bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    return hex::encode(hasher.finalize());
+    return hex::encode(Sha256::digest(bytes));
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::Value;
     use tempfile::tempdir;
 
     fn digest(character: char) -> String {
-        return std::iter::repeat(character).take(64).collect();
+        return character.to_string().repeat(64);
     }
 
-    fn signing_key(byte: u8) -> SigningKey {
+    fn key(byte: u8) -> SigningKey {
         return SigningKey::from_bytes(&[byte; 32]);
     }
 
-    fn identity_for(key: &SigningKey) -> DependencySafetyIdentity {
+    fn identity(signing_key: &SigningKey) -> DependencySafetyIdentity {
         return DependencySafetyIdentity {
             package: "gleam_stdlib".into(),
             version: "0.62.1".into(),
@@ -634,7 +451,7 @@ mod tests {
             analysis_policy_sha256: digest('e'),
             analyzer_revision: "compiler-rev-123".into(),
             analyzer_key_id: "analyzer-2026-q3".into(),
-            analyzer_public_key_sha256: public_key_sha256(&key.verifying_key()),
+            analyzer_public_key_sha256: public_key_sha256(&signing_key.verifying_key()),
             gleam_version: "1.18.1".into(),
             target: "erlang".into(),
             profile: "bmscl-hosted-gleam-v3-http-capability".into(),
@@ -642,238 +459,90 @@ mod tests {
     }
 
     #[test]
-    fn policy_change_invalidates_cache_key() {
-        let key = signing_key(7);
-        let first = identity_for(&key);
-        let mut second = first.clone();
-        second.policy_sha256 = digest('f');
+    fn identity_changes_invalidate_cache_key() {
+        let signing_key = key(7);
+        let first = identity(&signing_key);
+        for mutate in ["artifact", "policy", "analysis_policy"] {
+            let mut changed = first.clone();
+            match mutate {
+                "artifact" => changed.artifact_sha256 = digest('f'),
+                "policy" => changed.policy_sha256 = digest('f'),
+                _ => changed.analysis_policy_sha256 = digest('f'),
+            }
+            assert_ne!(first.cache_key_sha256().unwrap(), changed.cache_key_sha256().unwrap());
+        }
+    }
 
-        assert_ne!(
-            first.cache_key_sha256().expect("first key"),
-            second.cache_key_sha256().expect("second key")
+    #[test]
+    fn signed_cache_round_trip_and_wrong_key_fail_closed() {
+        let directory = tempdir().unwrap();
+        let signing_key = key(7);
+        let expected = identity(&signing_key);
+        let attestation = DependencySafetyAttestation::sign_safe(expected.clone(), &signing_key).unwrap();
+        store_verified(directory.path(), &attestation, &signing_key.verifying_key()).unwrap();
+        assert_eq!(
+            load_verified(directory.path(), &expected, &signing_key.verifying_key()).unwrap(),
+            Some(attestation.clone())
         );
+        assert!(load_verified(directory.path(), &expected, &key(8).verifying_key()).is_err());
     }
 
     #[test]
-    fn analysis_policy_change_invalidates_cache_key() {
-        let key = signing_key(7);
-        let first = identity_for(&key);
-        let mut second = first.clone();
-        second.analysis_policy_sha256 = digest('f');
-
-        assert_ne!(
-            first.cache_key_sha256().expect("first key"),
-            second.cache_key_sha256().expect("second key")
-        );
+    fn tampering_fails_closed() {
+        let directory = tempdir().unwrap();
+        let signing_key = key(7);
+        let expected = identity(&signing_key);
+        let attestation = DependencySafetyAttestation::sign_safe(expected.clone(), &signing_key).unwrap();
+        let path = store_verified(directory.path(), &attestation, &signing_key.verifying_key()).unwrap();
+        let mut value: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        value["identity"]["profile"] = "tampered".into();
+        fs::write(path, serde_json::to_vec(&value).unwrap()).unwrap();
+        assert!(load_verified(directory.path(), &expected, &signing_key.verifying_key()).is_err());
     }
 
     #[test]
-    fn content_change_invalidates_cache_key() {
-        let key = signing_key(7);
-        let first = identity_for(&key);
-        let mut second = first.clone();
-        second.artifact_sha256 = digest('f');
-
-        assert_ne!(
-            first.cache_key_sha256().expect("first key"),
-            second.cache_key_sha256().expect("second key")
-        );
-    }
-
-    #[test]
-    fn signer_rotation_invalidates_cache_key() {
-        let first_key = signing_key(7);
-        let second_key = signing_key(8);
-        let first = identity_for(&first_key);
-        let mut second = identity_for(&second_key);
-        second.analyzer_key_id = "analyzer-2026-q4".into();
-
-        assert_ne!(
-            first.cache_key_sha256().expect("first key"),
-            second.cache_key_sha256().expect("second key")
-        );
-    }
-
-    #[test]
-    fn signed_cache_round_trip() {
-        let directory = tempdir().expect("cache tempdir");
-        let key = signing_key(7);
-        let verifying_key = key.verifying_key();
-        let expected = identity_for(&key);
-        let attestation = DependencySafetyAttestation::sign_safe(expected.clone(), &key)
-            .expect("sign safety attestation");
-
-        store_verified(directory.path(), &attestation, &verifying_key)
-            .expect("store safety attestation");
-        let loaded = load_verified(directory.path(), &expected, &verifying_key)
-            .expect("load safety attestation")
-            .expect("cache hit");
-
-        assert_eq!(loaded, attestation);
-    }
-
-    #[test]
-    fn wrong_trust_key_fails_closed() {
-        let directory = tempdir().expect("cache tempdir");
-        let key = signing_key(7);
-        let wrong_key = signing_key(8);
-        let expected = identity_for(&key);
-        let attestation = DependencySafetyAttestation::sign_safe(expected.clone(), &key)
-            .expect("sign safety attestation");
-
-        let result = store_verified(directory.path(), &attestation, &wrong_key.verifying_key());
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn identity_mismatch_is_a_cache_miss() {
-        let directory = tempdir().expect("cache tempdir");
-        let key = signing_key(7);
-        let verifying_key = key.verifying_key();
-        let original = identity_for(&key);
-        let attestation = DependencySafetyAttestation::sign_safe(original.clone(), &key)
-            .expect("sign safety attestation");
-        store_verified(directory.path(), &attestation, &verifying_key)
-            .expect("store safety attestation");
-
-        let mut changed = original;
-        changed.policy_sha256 = digest('f');
-        let loaded = load_verified(directory.path(), &changed, &verifying_key)
-            .expect("load changed identity");
-
-        assert!(loaded.is_none());
-    }
-
-    #[test]
-    fn tampered_record_fails_closed() {
-        let directory = tempdir().expect("cache tempdir");
-        let key = signing_key(7);
-        let verifying_key = key.verifying_key();
-        let expected = identity_for(&key);
-        let attestation = DependencySafetyAttestation::sign_safe(expected.clone(), &key)
-            .expect("sign safety attestation");
-        let path = store_verified(directory.path(), &attestation, &verifying_key)
-            .expect("store safety attestation");
-
-        let mut value: Value = serde_json::from_slice(&fs::read(&path).expect("read cache object"))
-            .expect("parse cache object");
-        value["identity"]["profile"] = Value::String("tampered-profile".into());
-        fs::write(&path, serde_json::to_vec_pretty(&value).expect("encode tamper"))
-            .expect("write tampered object");
-
-        let result = load_verified(directory.path(), &expected, &verifying_key);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn artifact_hashing_is_bounded() {
-        let directory = tempdir().expect("artifact tempdir");
-        let path = directory.path().join("package.tar");
-        fs::write(&path, b"0123456789").expect("write package");
-
-        let result = sha256_file_with_limit(&path, 4);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn tree_digest_binds_paths_and_contents() {
-        let directory = tempdir().expect("source tempdir");
-        fs::create_dir_all(directory.path().join("src")).expect("create src");
-        fs::write(directory.path().join("src/main.gleam"), "pub fn main() { Nil }\n")
-            .expect("write source");
-        let first = sha256_tree(directory.path()).expect("first tree digest");
-
-        fs::write(directory.path().join("src/main.gleam"), "pub fn main() { True }\n")
-            .expect("rewrite source");
-        let second = sha256_tree(directory.path()).expect("second tree digest");
-
-        assert_ne!(first, second);
-    }
-
-    #[test]
-    fn tree_file_count_is_bounded() {
-        let directory = tempdir().expect("source tempdir");
-        fs::write(directory.path().join("a.gleam"), b"1234").expect("write a");
-        fs::write(directory.path().join("b.gleam"), b"5678").expect("write b");
-        let limits = HashLimits {
-            max_artifact_bytes: 16,
-            max_tree_entries: 8,
-            max_tree_files: 1,
-            max_tree_bytes: 16,
-            max_tree_depth: 8,
-            max_relative_path_bytes: 128,
-        };
-
-        let result = sha256_tree_with_limits(directory.path(), limits);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn tree_entry_count_is_bounded() {
-        let directory = tempdir().expect("source tempdir");
-        fs::create_dir_all(directory.path().join("a/b/c")).expect("create nested dirs");
+    fn hash_limits_fail_closed() {
+        let directory = tempdir().unwrap();
+        let file = directory.path().join("artifact");
+        fs::write(&file, b"0123456789").unwrap();
+        assert!(sha256_file_with_limit(&file, 4).is_err());
+        fs::create_dir_all(directory.path().join("a/b/c")).unwrap();
         let limits = HashLimits {
             max_artifact_bytes: 16,
             max_tree_entries: 2,
             max_tree_files: 8,
             max_tree_bytes: 16,
-            max_tree_depth: 8,
-            max_relative_path_bytes: 128,
-        };
-
-        let result = sha256_tree_with_limits(directory.path(), limits);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn tree_depth_is_bounded() {
-        let directory = tempdir().expect("source tempdir");
-        fs::create_dir_all(directory.path().join("a/b/c")).expect("create nested dirs");
-        let limits = HashLimits {
-            max_artifact_bytes: 16,
-            max_tree_entries: 8,
-            max_tree_files: 8,
-            max_tree_bytes: 16,
             max_tree_depth: 2,
             max_relative_path_bytes: 128,
         };
+        assert!(sha256_tree_with_limits(directory.path(), limits).is_err());
+    }
 
-        let result = sha256_tree_with_limits(directory.path(), limits);
-        assert!(result.is_err());
+    #[test]
+    fn tree_digest_binds_contents() {
+        let directory = tempdir().unwrap();
+        fs::write(directory.path().join("main.gleam"), "pub fn main() { Nil }\n").unwrap();
+        let first = sha256_tree(directory.path()).unwrap();
+        fs::write(directory.path().join("main.gleam"), "pub fn main() { True }\n").unwrap();
+        assert_ne!(first, sha256_tree(directory.path()).unwrap());
     }
 
     #[cfg(unix)]
     #[test]
-    fn tree_hash_rejects_symlinks() {
+    fn symlinks_are_rejected() {
         use std::os::unix::fs::symlink;
 
-        let directory = tempdir().expect("source tempdir");
-        fs::write(directory.path().join("real.gleam"), b"pub fn x() { Nil }\n")
-            .expect("write real source");
-        symlink("real.gleam", directory.path().join("alias.gleam"))
-            .expect("create source symlink");
+        let directory = tempdir().unwrap();
+        fs::write(directory.path().join("real"), b"x").unwrap();
+        symlink("real", directory.path().join("alias")).unwrap();
+        assert!(sha256_tree(directory.path()).is_err());
 
-        let result = sha256_tree(directory.path());
-        assert!(result.is_err());
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn cache_root_symlink_is_rejected() {
-        use std::os::unix::fs::symlink;
-
-        let directory = tempdir().expect("parent tempdir");
-        let real = directory.path().join("real-cache");
-        let alias = directory.path().join("alias-cache");
-        fs::create_dir(&real).expect("create real cache");
-        symlink(&real, &alias).expect("create cache symlink");
-
-        let key = signing_key(7);
-        let expected = identity_for(&key);
-        let attestation = DependencySafetyAttestation::sign_safe(expected, &key)
-            .expect("sign safety attestation");
-        let result = store_verified(&alias, &attestation, &key.verifying_key());
-
-        assert!(result.is_err());
+        let real_cache = directory.path().join("real-cache");
+        let alias_cache = directory.path().join("alias-cache");
+        fs::create_dir(&real_cache).unwrap();
+        symlink(&real_cache, &alias_cache).unwrap();
+        let signing_key = key(7);
+        let attestation = DependencySafetyAttestation::sign_safe(identity(&signing_key), &signing_key).unwrap();
+        assert!(store_verified(&alias_cache, &attestation, &signing_key.verifying_key()).is_err());
     }
 }
