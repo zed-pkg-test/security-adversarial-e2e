@@ -1,7 +1,7 @@
 {
   "repository": "beamscale/bmscl-compiler",
   "pull_request": 47,
-  "head_sha": "35f349ccd8067d8e6f01dd399d923827b73db1a4",
+  "head_sha": "fdb0817c0c108ec6e39c5ddc0e4dee65f666ad17",
   "path": "src/safety_cache.rs",
-  "git_blob_sha": "de917d9da16b74dabb70663d7696ce81175de0c2"
+  "git_blob_sha": "5caa19e38da4cf6869545988b1af36246c0802a5"
 }
