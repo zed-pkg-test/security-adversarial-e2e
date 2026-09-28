@@ -9,6 +9,9 @@ on:
 permissions:
   contents: read
 
+env:
+  ZED_INFRA_SHA: bbaeca52894ebd9d94b5e302114870bc99fb503b
+
 jobs:
   native-registry-fast:
     runs-on: ubuntu-latest
@@ -19,13 +22,17 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Check out zed-infra PR 108 head
+      - name: Check out exact zed-infra PR 108 source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: zed-pkg/zed-infra
-          ref: feat/native-registry-fallback-v2
+          ref: ${{ env.ZED_INFRA_SHA }}
           path: source/zed-infra
           persist-credentials: false
+
+      - name: Assert exact source commit
+        working-directory: source/zed-infra
+        run: test "$(git rev-parse HEAD)" = "${ZED_INFRA_SHA}"
 
       - name: Set up Node
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v6.0.0
@@ -54,13 +61,17 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Check out zed-infra PR 108 head
+      - name: Check out exact zed-infra PR 108 source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: zed-pkg/zed-infra
-          ref: feat/native-registry-fallback-v2
+          ref: ${{ env.ZED_INFRA_SHA }}
           path: source/zed-infra
           persist-credentials: false
+
+      - name: Assert exact source commit
+        working-directory: source/zed-infra
+        run: test "$(git rev-parse HEAD)" = "${ZED_INFRA_SHA}"
 
       - name: Set up Node
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v6.0.0
