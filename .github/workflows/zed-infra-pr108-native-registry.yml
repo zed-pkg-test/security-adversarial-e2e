@@ -10,9 +10,9 @@ permissions:
   contents: read
 
 jobs:
-  native-registry-worker-contract:
+  native-registry-fast:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 8
     steps:
       - name: Check out witness repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -38,12 +38,40 @@ jobs:
       - name: Audit locked dependencies
         run: npm audit --audit-level=low --prefix source/zed-infra/workers
 
-      - name: Run deterministic worker unit/type/runtime suite
-        run: npm test --prefix source/zed-infra/workers
-
-      - name: Prove native-registry security contracts explicitly
+      - name: Prove native-registry contracts
         working-directory: source/zed-infra/workers
         run: |
           node --test shared/native-registry-catalog.test.js
           node --test shared/native-registry-security.test.js
           node --test shared/native-public.test.js
+
+  full-worker-suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out witness repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Check out zed-infra PR 108 head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: zed-pkg/zed-infra
+          ref: feat/native-registry-fallback-v2
+          path: source/zed-infra
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v6.0.0
+        with:
+          node-version: '24.19.0'
+
+      - name: Install locked worker test runtime
+        run: npm ci --ignore-scripts --prefix source/zed-infra/workers
+
+      - name: Audit locked dependencies
+        run: npm audit --audit-level=low --prefix source/zed-infra/workers
+
+      - name: Run complete deterministic worker suite
+        run: npm test --prefix source/zed-infra/workers
