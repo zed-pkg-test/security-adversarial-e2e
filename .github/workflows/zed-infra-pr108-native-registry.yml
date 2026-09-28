@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 env:
-  ZED_INFRA_SHA: 721a36eb8a7153e2646d214ec11bf697b83011dc
+  ZED_INFRA_SHA: 2c2b048f302883c6338a4194aca13e2e9890152a
 
 jobs:
   native-registry-fast:
@@ -62,6 +62,7 @@ jobs:
           node --test shared/native-public-v4.test.js
           node --test shared/native-terraform-module.test.js
           node --test registry-proxy/src/packagist-native-fallback.test.js
+          node --test registry-proxy/src/terraform-module-fallback.test.js
 
   full-worker-suite:
     runs-on: ubuntu-latest
