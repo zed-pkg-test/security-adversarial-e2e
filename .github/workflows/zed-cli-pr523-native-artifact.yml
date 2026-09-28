@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 env:
-  ZED_CLI_SHA: ef646aa60edfc091a9092045c04da9bc357b123d
+  ZED_CLI_SHA: bd978a3e62d7ef4b4fc786d183f9afed5a69b699
 
 jobs:
   native-artifact-store:
