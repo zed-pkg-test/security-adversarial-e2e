@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 env:
-  ZED_INFRA_SHA: 39e7ec1a033e73aeb6343903f8073c295fb082fe
+  ZED_INFRA_SHA: cc07d41842ea0305066e2441a3f13bea353a528c
 
 jobs:
   native-registry-fast:
@@ -62,7 +62,7 @@ jobs:
 
   full-worker-suite:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     steps:
       - name: Check out witness repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
