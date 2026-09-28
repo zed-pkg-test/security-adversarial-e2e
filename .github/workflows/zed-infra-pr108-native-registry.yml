@@ -1,4 +1,4 @@
-name: zed-infra PR108 native registry witness
+name: zed-infra PR109 native registry witness
 
 on:
   pull_request:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 env:
-  ZED_INFRA_SHA: 8d12eff2607d0d3fdc5a2894f582f28f67cd2f56
+  ZED_INFRA_SHA: 14eae0d9314a4fd8c3d38e1e1132d6c2516c7436
 
 jobs:
   native-registry-fast:
@@ -22,7 +22,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Check out exact zed-infra PR 108 source
+      - name: Check out exact zed-infra PR 109 source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: zed-pkg/zed-infra
@@ -75,7 +75,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Check out exact zed-infra PR 108 source
+      - name: Check out exact zed-infra PR 109 source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: zed-pkg/zed-infra
