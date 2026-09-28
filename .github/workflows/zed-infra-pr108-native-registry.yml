@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 env:
-  ZED_INFRA_SHA: a188715b6b1b9a81c97f7f057ce83469d17ac861
+  ZED_INFRA_SHA: 610a36873ada0b314c380ba9e1584aae1135db92
 
 jobs:
   native-registry-fast:
@@ -51,8 +51,10 @@ jobs:
           node --test shared/native-registry-catalog.test.js
           node --test shared/native-registry-security.test.js
           node --test shared/native-wire-contract.test.js
+          node --test shared/core-tests/native-public.test.js
           node --test shared/native-public.test.js
           node --test shared/native-cpan-cran.test.js
+          node --test shared/native-public-extended.test.js
 
   full-worker-suite:
     runs-on: ubuntu-latest
