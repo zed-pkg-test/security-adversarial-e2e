@@ -1,0 +1,51 @@
+name: zed-cli PR523 native artifact witness
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/zed-cli-pr523-native-artifact.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  ZED_CLI_SHA: bd978a3e62d7ef4b4fc786d183f9afed5a69b699
+
+jobs:
+  native-artifact-store:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out witness repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Check out exact zed-cli PR 523 source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: zed-pkg/zed-cli
+          ref: ${{ env.ZED_CLI_SHA }}
+          path: source/zed-cli
+          persist-credentials: false
+
+      - name: Assert exact source commit
+        working-directory: source/zed-cli
+        run: test "$(git rev-parse HEAD)" = "${ZED_CLI_SHA}"
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.98.1
+
+      - name: Prove native artifact normalization and source gating
+        working-directory: source/zed-cli
+        run: |
+          cargo test --locked native_artifact -- --nocapture
+          cargo test --locked install_graph::artifact -- --nocapture
+          cargo check --locked --all-targets
+
+      - name: Check formatting
+        working-directory: source/zed-cli
+        run: cargo fmt --all -- --check
