@@ -1,0 +1,98 @@
+name: zed-infra PR108 native registry witness
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/zed-infra-pr108-native-registry.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  ZED_INFRA_SHA: d05f2b6f695034de8e141c0fe26f74145765c7b6
+
+jobs:
+  native-registry-fast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Check out witness repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Check out exact zed-infra PR 108 source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: zed-pkg/zed-infra
+          ref: ${{ env.ZED_INFRA_SHA }}
+          path: source/zed-infra
+          persist-credentials: false
+
+      - name: Assert exact source commit
+        working-directory: source/zed-infra
+        run: test "$(git rev-parse HEAD)" = "${ZED_INFRA_SHA}"
+
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v6.0.0
+        with:
+          node-version: '24.19.0'
+
+      - name: Install locked worker test runtime
+        run: npm ci --ignore-scripts --prefix source/zed-infra/workers
+
+      - name: Audit locked dependencies
+        run: npm audit --audit-level=low --prefix source/zed-infra/workers
+
+      - name: Prove native-registry contracts
+        working-directory: source/zed-infra/workers
+        run: |
+          node --test shared/native-registry-catalog.test.js
+          node --test shared/native-registry-security.test.js
+          node --test shared/native-wire-contract.test.js
+          node --test shared/core-tests/native-public.test.js
+          node --test shared/native-public.test.js
+          node --test shared/native-cpan-cran.test.js
+          node --test shared/native-public-extended.test.js
+          node --test shared/native-clojars.test.js
+          node --test shared/native-public-v3.test.js
+          node --test shared/native-packagist.test.js
+          node --test shared/native-public-v4.test.js
+          node --test shared/native-terraform-module.test.js
+          node --test registry-proxy/src/packagist-native-fallback.test.js
+
+  full-worker-suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out witness repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Check out exact zed-infra PR 108 source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: zed-pkg/zed-infra
+          ref: ${{ env.ZED_INFRA_SHA }}
+          path: source/zed-infra
+          persist-credentials: false
+
+      - name: Assert exact source commit
+        working-directory: source/zed-infra
+        run: test "$(git rev-parse HEAD)" = "${ZED_INFRA_SHA}"
+
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v6.0.0
+        with:
+          node-version: '24.19.0'
+
+      - name: Install locked worker test runtime
+        run: npm ci --ignore-scripts --prefix source/zed-infra/workers
+
+      - name: Audit locked dependencies
+        run: npm audit --audit-level=low --prefix source/zed-infra/workers
+
+      - name: Run complete deterministic worker suite
+        run: npm test --prefix source/zed-infra/workers
