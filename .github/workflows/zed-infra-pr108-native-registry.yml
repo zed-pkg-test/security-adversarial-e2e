@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 env:
-  ZED_INFRA_SHA: a7cd26649142be725a45a89f05eb87e7d692ab3b
+  ZED_INFRA_SHA: ac19b5b8e8d9ad6c6936a823124455a9f93796b9
 
 jobs:
   native-registry-fast:
@@ -58,6 +58,7 @@ jobs:
           node --test shared/native-clojars.test.js
           node --test shared/native-public-v3.test.js
           node --test shared/native-packagist.test.js
+          node --test shared/native-public-v4.test.js
 
   full-worker-suite:
     runs-on: ubuntu-latest
