@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 env:
-  ZED_INFRA_SHA: d3f801eb1c4bd68dcfb7364845e81bfb1f1b04b8
+  ZED_INFRA_SHA: c0f0224c81b72cc8c9be4073938c195ccd4c0dbd
 
 jobs:
   native-registry-fast:
@@ -59,6 +59,7 @@ jobs:
           node --test shared/native-public-v3.test.js
           node --test shared/native-packagist.test.js
           node --test shared/native-public-v4.test.js
+          node --test registry-proxy/src/packagist-native-fallback.test.js
 
   full-worker-suite:
     runs-on: ubuntu-latest
