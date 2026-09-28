@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 env:
-  ZED_INFRA_SHA: 68cba5cb376cb5bf8049d80bf7a1b3806b82e03e
+  ZED_INFRA_SHA: dd6656121e3fb537c8faace0a27e9e0908768e6d
 
 jobs:
   native-registry-fast:
@@ -61,6 +61,7 @@ jobs:
           node --test shared/native-packagist.test.js
           node --test shared/native-public-v4.test.js
           node --test shared/native-terraform-module.test.js
+          node --test shared/native-rubygems.test.js
           node --test registry-proxy/src/packagist-native-fallback.test.js
           node --test registry-proxy/src/terraform-module-fallback.test.js
 
