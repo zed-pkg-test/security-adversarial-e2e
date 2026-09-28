@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 env:
-  ZED_CLI_SHA: 1fe31dbc3eeb47d5d3d10dde91f5988df58d0e53
+  ZED_CLI_SHA: 97755a80e58d404aa9e5980c8c5fb2c86953f39a
 
 jobs:
   native-artifact-store:
@@ -39,9 +39,9 @@ jobs:
         with:
           toolchain: 1.98.1
 
-      - name: Prove native artifact normalization
+      - name: Prove native artifact normalization and source gating
         working-directory: source/zed-cli
-        run: cargo test --locked native_artifact_store -- --nocapture
+        run: cargo test --locked native_artifact -- --nocapture
 
       - name: Check formatting
         working-directory: source/zed-cli
