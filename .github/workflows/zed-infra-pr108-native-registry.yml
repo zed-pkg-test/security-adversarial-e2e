@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 env:
-  ZED_INFRA_SHA: d602a7a55e73dfa835a61a773517508b93d71c17
+  ZED_INFRA_SHA: b9bde6364012cfe135dad052cb4aa286e2ad002a
 
 jobs:
   native-registry-fast:
