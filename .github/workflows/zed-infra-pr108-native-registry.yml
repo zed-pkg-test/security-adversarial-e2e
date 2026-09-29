@@ -1,4 +1,4 @@
-name: zed-infra PR108 native registry witness
+name: zed-infra PR109 native registry witness
 
 on:
   pull_request:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 env:
-  ZED_INFRA_SHA: d05f2b6f695034de8e141c0fe26f74145765c7b6
+  ZED_INFRA_SHA: 14eae0d9314a4fd8c3d38e1e1132d6c2516c7436
 
 jobs:
   native-registry-fast:
@@ -22,7 +22,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Check out exact zed-infra PR 108 source
+      - name: Check out exact zed-infra PR 109 source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: zed-pkg/zed-infra
@@ -50,6 +50,7 @@ jobs:
         run: |
           node --test shared/native-registry-catalog.test.js
           node --test shared/native-registry-security.test.js
+          node --test shared/native-coordinate-routing.test.js
           node --test shared/native-wire-contract.test.js
           node --test shared/core-tests/native-public.test.js
           node --test shared/native-public.test.js
@@ -60,7 +61,10 @@ jobs:
           node --test shared/native-packagist.test.js
           node --test shared/native-public-v4.test.js
           node --test shared/native-terraform-module.test.js
+          node --test shared/native-rubygems.test.js
+          node --test shared/native-hex.test.js
           node --test registry-proxy/src/packagist-native-fallback.test.js
+          node --test registry-proxy/src/terraform-module-fallback.test.js
 
   full-worker-suite:
     runs-on: ubuntu-latest
@@ -71,7 +75,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Check out exact zed-infra PR 108 source
+      - name: Check out exact zed-infra PR 109 source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: zed-pkg/zed-infra
