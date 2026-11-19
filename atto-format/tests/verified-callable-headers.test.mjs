@@ -20,7 +20,7 @@ test('host verifier admits only binary-identical compilable rewrites',async()=>{
   await assert.rejects(()=>normalize_verified_callable_headers(sample,async()=>
     {throw new Error('E_UNSUPPORTED');}),/E_UNSUPPORTED/);
   await assert.rejects(()=>normalize_verified_callable_headers(sample,async()=>
-    new Uint8Array([1,2,3])),/valid guest Wasm header/);
+    new Uint8Array([1,2,3])),/bounded guest Wasm binary with valid header/);
   await assert.rejects(()=>normalize_verified_callable_headers('x'.repeat(1024*1024+1),async()=>guest),/limit/);
   await assert.rejects(()=>normalize_verified_callable_headers(sample,async()=>new Uint8Array([...guest,77])),/invalid guest Wasm module/);
   await assert.rejects(()=>normalize_verified_callable_headers(sample,async()=>new Uint8Array(16*1024*1024+1)),/bounded guest Wasm binary/);

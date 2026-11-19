@@ -22,7 +22,7 @@ jobs:
             ((count+=1))
           done < BLOB_SHA_MANIFEST.tsv
           test "$count" -eq 10
-          echo "Validated exact ten formatter blob SHAs from 3531b6b5a9138e12e3505a708e3c25729fa47fd1"
+          echo "Validated exact ten formatter blob SHAs from 197cbcadc3a8745baa42adce9cd7b524cbd53f32"
       - name: Run checked-in Node formatter regressions
         run: |
           node --test atto-format/tests/*.test.mjs
