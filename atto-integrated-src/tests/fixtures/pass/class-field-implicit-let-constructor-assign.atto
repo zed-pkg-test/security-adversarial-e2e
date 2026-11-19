@@ -1,0 +1,7 @@
+// expect-exit: 2
+// Unqualified type-first class fields default to let; constructor rebinding is allowed.
+define class Counter as
+    pub int count = 1;
+    constructor() { self.count = 2; }
+end
+pub fnc main(): int { return new Counter().count; }

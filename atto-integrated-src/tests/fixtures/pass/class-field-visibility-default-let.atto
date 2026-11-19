@@ -1,0 +1,12 @@
+// expect-exit: 42
+// Compiled guest oracle: package-visible implicit-let field and explicit constructor let.
+define class Vault as
+    private val int secret = 99;
+    pub[pkg] int id = 10;
+    pub let int count = 2;
+    constructor() { self.count = 30; }
+end
+pub fnc main(): int {
+    val v = new Vault();
+    return v.id + v.count + 2;
+}

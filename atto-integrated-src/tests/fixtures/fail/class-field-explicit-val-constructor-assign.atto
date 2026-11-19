@@ -1,0 +1,7 @@
+// expect-error: E_IMMUTABLE
+// Explicit val fixes the binding even though bare class fields default to let.
+define class Counter as
+    pub val int count = 1;
+    constructor() { self.count = 2; }
+end
+pub fnc main(): int { return 0; }

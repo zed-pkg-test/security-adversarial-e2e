@@ -1,0 +1,45 @@
+name: Atto integrated callable and class-field exact-source gate
+on:
+  push:
+    branches: [test/atto-return-first-20261118]
+permissions:
+  contents: read
+jobs:
+  integrated:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify all 46 source+fixture Git blobs at f79c4b4be9d110d10c1907fd16d4051295ea724a
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd atto-integrated-src
+          count=0
+          while IFS=$'\t' read -r expected path; do
+            test "$(git hash-object -- "$path")" = "$expected"
+            ((count+=1))
+          done < BLOB_SHA_MANIFEST.tsv
+          test "$count" -eq 46
+          echo "Verified 46 exact blobs from f79c4b4be9d110d10c1907fd16d4051295ea724a"
+      - name: Check integrated Rust compiler
+        run: cd atto-integrated-src && cargo check --locked
+      - name: Run all 4 focused test suites and library unit tests
+        run: |
+          cd atto-integrated-src
+          cargo test --locked --lib \
+            --test explicit_callable_returns \
+            --test return_first_callable_syntax \
+            --test class_field_default_let \
+            --test class_field_visibility -- --nocapture
+      - name: Build compiler from same source tree
+        run: cd atto-integrated-src && cargo build --locked --bin attoc
+      - name: Execute 24 return-variant Wasm guests and 6 negative checks
+        run: |
+          set -euo pipefail
+          sed 's@atto-src/target/debug/attoc@atto-integrated-src/target/debug/attoc@g' test-runner/atto-guest-proof.mjs | node --input-type=module
+      - name: Execute actual implicit-let and explicit-val guest fixtures
+        run: |
+          set -euo pipefail
+          sed 's@atto-let-src/@atto-integrated-src/@g' test-runner/atto-class-let-proof.mjs | node --input-type=module
