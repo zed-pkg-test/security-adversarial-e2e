@@ -11,7 +11,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Verify 40 exact source blobs from 0f7f649ae285e38299fc2d114f25e01564fc474d
+      - name: Verify 44 exact source blobs from 006c81372b794f80168882cab3b0a52b22059553
         shell: bash
         run: |
           set -euo pipefail
@@ -21,11 +21,11 @@ jobs:
             test "$(git hash-object -- "$path")" = "$expected"
             ((count+=1))
           done < BLOB_SHA_MANIFEST.tsv
-          test "$count" -eq 40
+          test "$count" -eq 44
       - name: Check compiler
         run: cd atto-let-src && cargo check --locked
       - name: Run class-field and Rust library regressions
-        run: cd atto-let-src && cargo test --locked --lib --test class_field_default_let -- --nocapture
+        run: cd atto-let-src && cargo test --locked --lib --test class_field_default_let --test class_field_visibility -- --nocapture
       - name: Build Atto native compiler
         run: cd atto-let-src && cargo build --locked --bin attoc
       - name: Execute class let and immutable val guest proofs

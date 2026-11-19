@@ -38,3 +38,7 @@ cc57988df9251a4b6b051b72a119397c0b46803b	src/visibility_lower.rs
 a596a85e1e5804fe6a195d3178b731445904738c	src/wasm.rs
 a66e48d8a46cdf6eb18aaae2f3942b82bc4165d1	src/wasm/generator_runtime.rs
 777b2f9c13975ad408c476b6cf590106a874d590	tests/class_field_default_let.rs
+b6d06bd13fb4d55224a38900a0509f18c851366d	tests/class_field_visibility.rs
+a04fec400cabd07e6f3149aefcc5011acd86b0b4	tests/fixtures/fail/class-field-explicit-val-constructor-assign.atto
+80a71195fe955dac917616a86cdb63433ee73a0a	tests/fixtures/pass/class-field-implicit-let-constructor-assign.atto
+ba51b06c5c594033604d204c8fa7c508200032d4	tests/fixtures/pass/class-field-visibility-default-let.atto

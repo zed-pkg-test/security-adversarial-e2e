@@ -44,5 +44,18 @@ try {
   'end',
   'pub fnc main() -> int { return 0; }',
  ].join('\n'),null,'E_OWNERSHIP');
+
+ const fixtureRoot=resolve('atto-let-src/tests/fixtures');
+ const fixturePasses=[
+   ['implicit-let-fixture','pass/class-field-implicit-let-constructor-assign.atto',2],
+   ['package-visibility-fixture','pass/class-field-visibility-default-let.atto',42],
+ ];
+ for (const [name,path,expected] of fixturePasses) {
+   const source=readFileSync(join(fixtureRoot,path),'utf8');
+   check(name,source,expected);
+ }
+ check('explicit-val-fixture',
+   readFileSync(join(fixtureRoot,'fail/class-field-explicit-val-constructor-assign.atto'),'utf8'),
+   null,'E_IMMUTABLE');
  console.log('PASS '+ok+' compiled class-field-let Wasm guests; '+denied+' compile-time rejections with no artifacts');
 } finally{ rmSync(dir,{recursive:true,force:true}); }
