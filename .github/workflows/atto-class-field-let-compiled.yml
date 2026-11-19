@@ -11,7 +11,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Verify 44 exact source blobs from 006c81372b794f80168882cab3b0a52b22059553
+      - name: Verify 44 exact source blobs from 56d855e9881bacbcaf4fa60b0ec1b5c37471cd59
         shell: bash
         run: |
           set -euo pipefail

@@ -131,14 +131,14 @@ fn implicit_type_first_fields_are_let_and_explicit_val_remains_immutable() {
 fn implicit_let_and_explicit_let_admit_constructor_assignment_but_val_rejects() {
     let source = r#"
         define class Box as
-            int count = 1;
+            pub int count = 1;
             constructor() { self.count = 2; }
         end
         pub fnc main(): int { return new Box().count; }
     "#;
     compiled(source);
-    compiled(&source.replace("int count = 1;", "let int count = 1;"));
-    rejected(&source.replace("int count = 1;", "val int count = 1;"),
+    compiled(&source.replace("pub int count = 1;", "pub let int count = 1;"));
+    rejected(&source.replace("pub int count = 1;", "pub val int count = 1;"),
         "E_IMMUTABLE");
 }
 #[test]
