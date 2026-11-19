@@ -1,0 +1,32 @@
+name: Atto implicit class-field let exact-source proof
+on:
+  push:
+    branches: [test/atto-return-first-20261118]
+permissions:
+  contents: read
+jobs:
+  class-field-let:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify 40 exact source blobs from 0f7f649ae285e38299fc2d114f25e01564fc474d
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd atto-let-src
+          count=0
+          while IFS=$'\t' read -r expected path; do
+            test "$(git hash-object -- "$path")" = "$expected"
+            ((count+=1))
+          done < BLOB_SHA_MANIFEST.tsv
+          test "$count" -eq 40
+      - name: Check compiler
+        run: cd atto-let-src && cargo check --locked
+      - name: Run class-field and Rust library regressions
+        run: cd atto-let-src && cargo test --locked --lib --test class_field_default_let -- --nocapture
+      - name: Build Atto native compiler
+        run: cd atto-let-src && cargo build --locked --bin attoc
+      - name: Execute class let and immutable val guest proofs
+        run: node test-runner/atto-class-let-proof.mjs
