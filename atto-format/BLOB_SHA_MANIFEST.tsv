@@ -2,3 +2,9 @@ ba008df62c2a201e09f05b0fae1942971691bf74	src/callable-headers.mjs
 482d8c0dc76a0f1b440c49cf272494f147cd6717	tests/callable-headers.test.mjs
 f5861378c4603be6942aa7c14dbb4ec6d25ced6f	tests/explicit-return-annotations.test.mjs
 f333332cb8784d371aec9bfa6428330ba2464493	tests/return-first-callable-headers.test.mjs
+ff6f5cee20300f2a3dc41f0a7e1cb406d5ce32a9	src/ownership-operations.mjs
+cde0930981c63dc3cfafb2640c4d4f3da8ddb7d2	src/verified-callable-headers.mjs
+93e340ae4e995d8306c8fbbef84bd4c45a42718d	tests/ownership-operations.test.mjs
+a37d59c8eb3fb842082483a63ecc19799e5a92ad	tests/struct-equals-spelling.test.mjs
+05d5dbee5681d869da0f3979e52d5e9b962a5046	tests/susp-alias.test.mjs
+5e98b12c0fb1e89cc0cb150a5c1d5eb49727a3c7	tests/verified-callable-headers.test.mjs
