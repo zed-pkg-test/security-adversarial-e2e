@@ -1,0 +1,16 @@
+name: Atto return-first runner capacity
+on:
+  push:
+    branches: [test/atto-return-first-20261118]
+permissions:
+  contents: read
+jobs:
+  admission:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Source-free runner admission
+        run: |
+          echo ATTO_RUNNER_READY
+          rustc --version
+          cargo --version
+          test "$(uname -s)" = Linux
