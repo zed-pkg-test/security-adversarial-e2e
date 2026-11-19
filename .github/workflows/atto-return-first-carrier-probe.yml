@@ -1,0 +1,17 @@
+name: Source-free Atto return-first carrier capacity check
+on:
+  push:
+    branches: [probe/atto-return-first-admission-20261119]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  runner-admission:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm runner admission with no mirrored source
+        shell: bash
+        run: |
+          echo "ATTO_SOURCE_FREE_RUNNER_ADMITTED"
+          uname -a
+          test -n "$GITHUB_SHA"
