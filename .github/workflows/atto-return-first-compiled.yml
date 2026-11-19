@@ -1,0 +1,34 @@
+name: Atto return-first exact-source Rust tests
+on:
+  push:
+    branches: [test/atto-return-first-20261118]
+permissions:
+  contents: read
+jobs:
+  cargo-guest-compiler:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout local token-free mirrored crate
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify all 39 source blob SHAs
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd atto-src
+          count=0
+          while IFS=$'\t' read -r expected path; do
+            actual="$(git hash-object -- "$path")"
+            if [[ "$actual" != "$expected" ]]; then
+              echo "::error::Git blob mismatch: $path"
+              exit 1
+            fi
+            ((count+=1))
+          done < BLOB_SHA_MANIFEST.tsv
+          test "$count" -eq 39
+          echo "Verified $count exact Git source blobs from a593f534edba2b4851ca625cd38313e388116b24"
+      - name: Check Rust compiler
+        run: cd atto-src && cargo check --locked
+      - name: Run return syntax and guest Wasm tests
+        run: cd atto-src && cargo test --locked --test explicit_callable_returns --test return_first_callable_syntax -- --nocapture
