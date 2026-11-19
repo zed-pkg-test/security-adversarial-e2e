@@ -27,7 +27,7 @@ jobs:
             ((count+=1))
           done < BLOB_SHA_MANIFEST.tsv
           test "$count" -eq 39
-          echo "Verified $count exact Git source blobs from a593f534edba2b4851ca625cd38313e388116b24"
+          echo "Verified $count exact Git source blobs from 5aa1168f8d9d146553c7fa8adccfb354a80904f3"
       - name: Check Rust compiler
         run: cd atto-src && cargo check --locked
       - name: Run return syntax and guest Wasm tests

@@ -65,7 +65,7 @@ try {
     ['duplicate-signature','fnc calculate(int x) -> int { return x; }\nint <- calculate(int x) begin return x; end','E_DUPLICATE'],
   ];
   for (const [label, source, code] of negatives) {
-    compile(source+'\npub fnc main() -> int { return 0; }', label, code);
+    compile(label === 'missing-end' ? source : source+'\n'+"pub fnc main() -> int { return 0; }", label, code);
   }
   console.log('PASS '+executed+' real compiled WebAssembly guests executed with correct BigInt results; '+rejected+' compiler rejections produced no artifacts');
 } finally {

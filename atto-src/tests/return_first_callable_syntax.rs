@@ -179,3 +179,32 @@ fn nested_generic_return_first_headers_preserve_complete_declared_type() {
     assert_eq!(p.funcs[2].ret, Type::OptionResultIntStr);
     assert_eq!(p.classes[0].methods[0].ret, Type::OptionInt);
 }
+
+#[test]
+fn return_first_out_of_line_class_method_compiles_through_checked_guest_lowering() {
+    // Out-of-line mtd must use the same typed class method checker, not a
+    // syntax-only shortcut or an unchecked receiver dispatch path.
+    for body in [
+        "{ return self.value; }",
+        "begin return self.value; end",
+        "return self.value; end",
+    ] {
+        let src = format!(r#"
+            declare class Counter;
+            define class Counter as
+              pub let int value = 0;
+            end
+            pub constructor (Counter)(int initial): self {{
+              self.value = initial;
+            }}
+            pub mtd (Counter self) int <- get_value() {body}
+            pub fnc main() -> int {{
+              val counter = new Counter(42);
+              return counter.get_value();
+            }}
+        "#);
+        let guest = compile(&src).unwrap_or_else(|e|
+            panic!("return-first out-of-line class method {body}: {e}"));
+        assert_eq!(&guest[..8], &[0, 97, 115, 109, 1, 0, 0, 0]);
+    }
+}
