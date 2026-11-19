@@ -7,7 +7,7 @@ import { normalize_callable_headers } from '../atto-format/src/callable-headers.
 const source = [
   'define class Counter as',
   '  pub int value: 42;',
-  '  fnc get_value() -> int { return self.value; }',
+  '  pub fnc get_value() -> int { return self.value; }',
   'end',
   'pub fnc main() -> int {',
   '  val counter = new Counter();',
