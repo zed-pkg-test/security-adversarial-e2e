@@ -1,0 +1,35 @@
+name: Atto return-first formatter conformance on external runner
+on:
+  push:
+    branches: [test/atto-return-first-20261118]
+permissions:
+  contents: read
+jobs:
+  node-formatter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify four Atto formatter source blobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd atto-format
+          count=0
+          while IFS=$'\t' read -r expected path; do
+            test "$(git hash-object -- "$path")" = "$expected"
+            ((count+=1))
+          done < BLOB_SHA_MANIFEST.tsv
+          test "$count" -eq 4
+          echo "Validated exact four formatter blob SHAs from 3531b6b5a9138e12e3505a708e3c25729fa47fd1"
+      - name: Run checked-in Node formatter regressions
+        run: |
+          node --test \
+            atto-format/tests/callable-headers.test.mjs \
+            atto-format/tests/explicit-return-annotations.test.mjs \
+            atto-format/tests/return-first-callable-headers.test.mjs
+      - name: Build pinned Atto compiler for actual guest parity
+        run: cd atto-src && cargo build --locked --bin attoc
+      - name: Verify formatter does not change executable guest
+        run: node test-runner/atto-format-guest-proof.mjs

@@ -1,0 +1,4 @@
+ba008df62c2a201e09f05b0fae1942971691bf74	src/callable-headers.mjs
+482d8c0dc76a0f1b440c49cf272494f147cd6717	tests/callable-headers.test.mjs
+f5861378c4603be6942aa7c14dbb4ec6d25ced6f	tests/explicit-return-annotations.test.mjs
+f333332cb8784d371aec9bfa6428330ba2464493	tests/return-first-callable-headers.test.mjs
