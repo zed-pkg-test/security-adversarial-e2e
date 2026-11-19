@@ -32,3 +32,9 @@ jobs:
         run: cd atto-src && cargo check --locked
       - name: Run return syntax and guest Wasm tests
         run: cd atto-src && cargo test --locked --test explicit_callable_returns --test return_first_callable_syntax -- --nocapture
+      - name: Run Rust library unit tests
+        run: cd atto-src && cargo test --locked --lib
+      - name: Build exact source Atto compiler binary
+        run: cd atto-src && cargo build --locked --bin attoc
+      - name: Execute 24 real compiled guest Wasm variants and 6 negatives
+        run: node test-runner/atto-guest-proof.mjs
